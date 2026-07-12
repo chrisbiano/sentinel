@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Monochrome dark theme — neutral grey, low contrast.
+       Edit these ten values to re-color the whole app. */
+    --c-bg: 10 10 10;        /* near black  */
+    --c-surface: 23 23 23;   /* card        */
+    --c-surface2: 33 33 33;  /* raised card */
+    --c-line: 38 38 38;      /* hairline    */
+    --c-line2: 64 64 64;     /* hover line  */
+    --c-fg: 245 245 245;     /* text        */
+    --c-muted: 163 163 163;  /* muted text  */
+    --c-faint: 115 115 115;  /* faint text  */
+    --c-accent: 250 250 250; /* white accent */
+    --c-accent-fg: 10 10 10; /* on accent   */
+  }
+
+  body {
+    @apply bg-bg text-fg antialiased;
+    font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-accent text-accent-fg rounded-lg font-medium hover:opacity-90 transition-opacity;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-transparent border border-line2 text-fg rounded-lg font-medium hover:bg-surface2 transition-colors;
+  }
+
+  .card {
+    @apply bg-surface rounded-xl border border-line p-4 transition-all duration-150;
+  }
+
+  .card-hover {
+    @apply hover:border-line2 hover:-translate-y-0.5;
+  }
+
+  .section-title {
+    @apply text-base sm:text-lg font-medium text-fg tracking-tight;
+  }
+
+  .input {
+    @apply bg-surface2 border border-line2 text-fg rounded-lg px-3 py-2 text-sm
+           placeholder:text-faint focus:outline-none focus:ring-1 focus:ring-fg/30 focus:border-transparent;
+  }
+}
