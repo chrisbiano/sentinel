@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import useTasks from './hooks/useTasks'
 import Layout from './components/Layout'
 import GreetingHeader from './components/GreetingHeader'
 import StatRow from './components/StatRow'
@@ -8,56 +9,19 @@ import TasksSection from './components/TasksSection'
 import UnsubscribeSection from './components/UnsubscribeSection'
 import SettingsModal from './components/SettingsModal'
 
-const TASKS_KEY = 'sentinel.tasks.v1'
 const SETTINGS_KEY = 'sentinel.settings.v1'
 const defaultSettings = { hideCompleted: false }
 
-const defaultTasks = [
-  {
-    id: 1,
-    title: 'Client call with RSM',
-    time: '09:00 AM',
-    duration: 60,
-    hasReminder: true,
-    isUrgent: false,
-    completed: false,
-    subtasks: []
-  },
-  {
-    id: 2,
-    title: 'Edit video for Champions for Growth',
-    time: '02:00 PM',
-    duration: 120,
-    hasReminder: false,
-    isUrgent: false,
-    completed: false,
-    subtasks: [
-      { id: 's1', title: 'Pull selects', done: true },
-      { id: 's2', title: 'Rough cut', done: false },
-      { id: 's3', title: 'Color + export', done: false },
-    ]
-  },
-]
-
 export default function App() {
-  const [tasks, setTasks] = useState(() => {
-    try {
-      const saved = localStorage.getItem(TASKS_KEY)
-      if (saved) return JSON.parse(saved)
-    } catch (e) {
-      // ignore corrupt storage, fall back to defaults
-    }
-    return defaultTasks
-  })
-
-  // Persist tasks so they survive refreshes (no backend yet).
-  useEffect(() => {
-    try {
-      localStorage.setItem(TASKS_KEY, JSON.stringify(tasks))
-    } catch (e) {
-      // storage full / unavailable — non-fatal
-    }
-  }, [tasks])
+  const {
+    tasks,
+    addTask,
+    updateTask,
+    deleteTask,
+    toggleReminder,
+    toggleComplete,
+    toggleSubtask,
+  } = useTasks()
 
   const [settings, setSettings] = useState(() => {
     try {
@@ -120,48 +84,6 @@ export default function App() {
     },
   ])
 
-  const toggleTaskReminder = (id) => {
-    setTasks(prev => prev.map(task =>
-      task.id === id ? { ...task, hasReminder: !task.hasReminder } : task
-    ))
-  }
-
-  const toggleTaskComplete = (id) => {
-    setTasks(prev => prev.map(task =>
-      task.id === id ? { ...task, completed: !task.completed } : task
-    ))
-  }
-
-  const addTask = (data) => {
-    setTasks(prev => [
-      ...prev,
-      { id: Date.now(), isUrgent: false, completed: false, subtasks: [], ...data },
-    ])
-  }
-
-  const toggleSubtask = (taskId, subId) => {
-    setTasks(prev => prev.map(task =>
-      task.id === taskId
-        ? {
-            ...task,
-            subtasks: (task.subtasks || []).map(s =>
-              s.id === subId ? { ...s, done: !s.done } : s
-            ),
-          }
-        : task
-    ))
-  }
-
-  const updateTask = (id, data) => {
-    setTasks(prev => prev.map(task =>
-      task.id === id ? { ...task, ...data } : task
-    ))
-  }
-
-  const deleteTask = (id) => {
-    setTasks(prev => prev.filter(task => task.id !== id))
-  }
-
   const approveUnsubscribe = (id) => {
     setUnsubscribeSuggestions(
       unsubscribeSuggestions.map(item =>
@@ -213,8 +135,8 @@ export default function App() {
         <div id="working-area" className="grid grid-cols-1 lg:grid-cols-2 gap-6 scroll-mt-20">
           <TasksSection
             tasks={visibleTasks}
-            onToggleReminder={toggleTaskReminder}
-            onToggleComplete={toggleTaskComplete}
+            onToggleReminder={toggleReminder}
+            onToggleComplete={toggleComplete}
             onAdd={addTask}
             onUpdate={updateTask}
             onDelete={deleteTask}
