@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 function XIcon() {
   return (
@@ -36,12 +37,19 @@ const integrations = [
 ]
 
 export default function SettingsModal({ open, onClose, settings, onChange }) {
+  const [email, setEmail] = useState(null)
+
   useEffect(() => {
     if (!open) return
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
+
+  useEffect(() => {
+    if (!open || !isSupabaseConfigured) return
+    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
+  }, [open])
 
   if (!open) return null
 
@@ -83,6 +91,25 @@ export default function SettingsModal({ open, onClose, settings, onChange }) {
               />
             </div>
           </div>
+
+          {/* Account */}
+          {isSupabaseConfigured && (
+            <div>
+              <h3 className="text-xs font-medium text-faint uppercase tracking-wider mb-3">Account</h3>
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm text-fg truncate">{email || 'Signed in'}</p>
+                  <p className="text-xs text-faint mt-0.5">Google account</p>
+                </div>
+                <button
+                  onClick={() => supabase.auth.signOut()}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors shrink-0"
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Integrations */}
           <div>
