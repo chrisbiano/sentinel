@@ -21,9 +21,12 @@ const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')
 // Chris picked Haiku: this is high-volume triage across six mailboxes, and the
 // judgment call per message is small even if the reasoning matters.
 const MODEL = 'claude-haiku-4-5'
-const MAX_PER_RUN = 20        // messages classified per invocation
-const LIST_PER_ACCOUNT = 40   // ids pulled per mailbox per invocation
-const BODY_CHARS = 1500       // enough to find an ask buried a few paragraphs down
+const MAX_PER_RUN = 20         // messages classified per invocation (one Claude call)
+// Gmail returns newest first. This has to comfortably exceed a week's mail in a
+// busy mailbox or the older half of the window is never even looked at — it
+// wouldn't error, it would just quietly never appear in the list.
+const LIST_PER_ACCOUNT = 100
+const BODY_CHARS = 1500        // enough to find an ask buried a few paragraphs down
 
 // supabase-js sends x-client-info/apikey on invoke — all of them must be
 // allow-listed or the browser's preflight blocks the request.
@@ -140,9 +143,32 @@ function parseFrom(value: string) {
 
 /* ---------- Claude ---------- */
 
-const SYSTEM = `You are triaging the inbox of Chris Biano, who owns and runs Fast Rose Creative, a video production company. He shoots and edits video for clients — one of them is the artist and podcast host Calvin Nowell. He is the decision-maker at his company: proposals, scheduling, invoices, and deliverable questions all land on him personally.
+/* Chris wears several hats — the video company, his band, personal life — and
+   the same email can be urgent in one mailbox and junk in another. So the
+   mailbox roster (written by him, in Settings) is built into the prompt rather
+   than hardcoded here: he adds an account, he describes it, Claude adapts. A
+   mailbox he hasn't described is called out as such so Claude stays cautious
+   instead of confidently inventing a context for it. */
+function buildSystem(accounts: { email: string; purpose: string | null }[]) {
+  const roster = accounts.map((a) =>
+    a.purpose?.trim()
+      ? `- ${a.email} — ${a.purpose.trim()}`
+      : `- ${a.email} — (Chris hasn't described this mailbox. You don't know what it's for, so judge conservatively: prefer "read" over "junk" for anything written by a real human, and don't assume it's business mail.)`
+  ).join('\n')
 
-Sort each email into exactly one action — what Chris should DO with it:
+  return `You are triaging email for Chris Biano across several mailboxes.
+
+Chris wears more than one hat, and this is the single most important thing to get right. He owns and runs Fast Rose Creative, a video production company — he shoots and edits for clients (one is the artist and podcast host Calvin Nowell), and proposals, scheduling, invoices, and deliverable questions all land on him personally. He also plays in a band. He also has ordinary personal mail. Some mailboxes mix business and personal freely.
+
+The mailbox an email arrived in is a primary signal, not a footnote. The same message can be junk in one and urgent in another: a venue asking about dates is critical on a band address and cold outreach on a business one. A note from a friend is noise in a client inbox and the whole point in a personal one. Read the mailbox description first, then the email.
+
+Chris's mailboxes, in his own words:
+${roster}
+
+Sort each email into exactly one action — what Chris should DO with it:`
+}
+
+const RUBRIC = `
 
 "reply" — A specific human is waiting on a response from Chris and cannot proceed without it. A direct question, a request for a decision or approval, a proposal awaiting yes/no, a scheduling ask, a client asking where a deliverable is, a vendor needing an answer. If someone would reasonably follow up asking "did you see my email?", it is a reply.
 
@@ -153,11 +179,13 @@ Sort each email into exactly one action — what Chris should DO with it:
 "junk" — One-off noise with no ongoing relationship: cold sales outreach, spam, phishing, scraped-list pitches, anything from a sender he has no relationship with and who will not send again on a schedule.
 
 How to judge:
-- Weigh the body, not the subject. Marketing lines like "Quick question?" or "Following up" are designed to look personal. A real ask names something specific about Chris's actual work.
+- Judge against the mailbox this arrived in, not against Chris in general. An email that would be cold outreach in one mailbox can be exactly what another mailbox exists to receive. Check the description before you decide.
+- Weigh the body, not the subject. Marketing lines like "Quick question?" or "Following up" are designed to look personal. A real ask names something specific.
 - Automated mail is never "reply", however urgently it is phrased. No-reply addresses, notification bots, and system alerts cannot receive an answer.
 - If Chris is CC'd and the ask is clearly directed at someone else, that is "read", not "reply".
-- Cold outreach that opens with flattery about his work is still cold outreach. Judge it by whether there is an existing relationship, not by how personal the tone is.
-- Client mail beats everything. When you are torn between "reply" and "read" for someone who is plausibly a paying client, choose "reply" — a missed client email costs him far more than an extra item on a list.
+- Cold outreach that opens with flattery is still cold outreach. Judge it by whether there is an existing relationship, not by how personal the tone is.
+- Real people beat everything. When torn between "reply" and "read" for a human who is plausibly a client, a bandmate, a venue, a collaborator, or a friend, choose "reply" — a missed real email costs him far more than an extra item on a list.
+- Never file a human being's personal message as "junk" because it is not business. On a personal or mixed mailbox, a friend or family member writing to him is the mail that matters most.
 - When torn between "unsubscribe" and "junk", prefer "unsubscribe". It is the reversible, lower-stakes call.
 
 Write "reason" as one short, concrete sentence naming the actual thing in the email — "Asking to move Thursday's shoot to Friday", not "Requires a response". Chris reads the reason to decide whether to trust you, so a vague reason is a useless one.`
@@ -183,7 +211,7 @@ const SCHEMA = {
   additionalProperties: false,
 }
 
-async function classify(anthropic: Anthropic, batch: any[]) {
+async function classify(anthropic: Anthropic, batch: any[], accounts: any[]) {
   const rendered = batch.map((m, i) => [
     `[${i}]`,
     `From: ${m.sender} <${m.sender_email}>`,
@@ -196,7 +224,7 @@ async function classify(anthropic: Anthropic, batch: any[]) {
   const res = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 4096,
-    system: SYSTEM,
+    system: buildSystem(accounts) + RUBRIC,
     output_config: { format: { type: 'json_schema', schema: SCHEMA } },
     messages: [{
       role: 'user',
@@ -224,9 +252,11 @@ Deno.serve(async (req) => {
     return json({ error: 'ANTHROPIC_API_KEY is not set on this function' }, 500)
   }
 
+  // `purpose` is Chris's own description of each mailbox — it goes straight into
+  // the prompt and is what lets the same email be urgent here and junk there.
   const { data: accounts } = await admin
     .from('connected_accounts')
-    .select('id, email')
+    .select('id, email, purpose')
     .eq('user_id', userId)
     .eq('provider', 'google')
 
@@ -302,7 +332,7 @@ Deno.serve(async (req) => {
   if (batch.length) {
     try {
       const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY })
-      const verdicts = await classify(anthropic, batch)
+      const verdicts = await classify(anthropic, batch, accounts)
       const byRef = new Map(verdicts.map((v) => [v.ref, v]))
 
       const rows = batch.map((m, i) => {
