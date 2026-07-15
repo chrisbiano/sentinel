@@ -1,5 +1,16 @@
 import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { startGoogleConnect, isConnectConfigured } from '../lib/connect'
+import useConnectedAccounts from '../hooks/useConnectedAccounts'
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  )
+}
 
 function XIcon() {
   return (
@@ -30,14 +41,20 @@ function Toggle({ checked, onChange }) {
   )
 }
 
-const integrations = [
-  { name: 'Google Calendar', status: 'Not connected', note: 'Pulls events onto your timeline' },
-  { name: 'Gmail', status: 'Not connected', note: 'Surfaces emails needing a reply' },
-  { name: 'Structured', status: 'No public API', note: 'Move tasks over manually' },
-]
-
 export default function SettingsModal({ open, onClose, settings, onChange }) {
   const [email, setEmail] = useState(null)
+  const [connecting, setConnecting] = useState(false)
+  const { accounts, loading: accountsLoading, disconnect } = useConnectedAccounts()
+
+  const connect = async () => {
+    setConnecting(true)
+    try {
+      await startGoogleConnect()
+    } catch (e) {
+      console.error('Connect failed:', e)
+      setConnecting(false)
+    }
+  }
 
   useEffect(() => {
     if (!open) return
@@ -95,11 +112,13 @@ export default function SettingsModal({ open, onClose, settings, onChange }) {
           {/* Account */}
           {isSupabaseConfigured && (
             <div>
-              <h3 className="text-xs font-medium text-faint uppercase tracking-wider mb-3">Account</h3>
+              <h3 className="text-xs font-medium text-faint uppercase tracking-wider mb-3">Signed in as</h3>
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-sm text-fg truncate">{email || 'Signed in'}</p>
-                  <p className="text-xs text-faint mt-0.5">Google account</p>
+                  <p className="text-xs text-faint mt-0.5">
+                    Your Sentinel login — this alone doesn't give access to any mail or calendar
+                  </p>
                 </div>
                 <button
                   onClick={() => supabase.auth.signOut()}
@@ -111,27 +130,58 @@ export default function SettingsModal({ open, onClose, settings, onChange }) {
             </div>
           )}
 
-          {/* Integrations */}
-          <div>
-            <h3 className="text-xs font-medium text-faint uppercase tracking-wider mb-3">Integrations</h3>
-            <div className="space-y-2">
-              {integrations.map(i => (
-                <div key={i.name} className="flex items-center justify-between gap-4 py-1">
-                  <div className="min-w-0">
-                    <p className="text-sm text-fg">{i.name}</p>
-                    <p className="text-xs text-faint mt-0.5">{i.note}</p>
-                  </div>
-                  <span className="text-xs text-muted border border-line px-2.5 py-1 rounded-full shrink-0">
-                    {i.status}
-                  </span>
+          {/* Connected mailboxes */}
+          {isConnectConfigured && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-xs font-medium text-faint uppercase tracking-wider">
+                  Connected accounts
+                </h3>
+                <button
+                  onClick={connect}
+                  disabled={connecting}
+                  className="flex items-center gap-1 text-xs font-medium text-muted hover:text-fg border border-line2 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
+                >
+                  <PlusIcon /> {connecting ? 'Opening…' : 'Connect account'}
+                </button>
+              </div>
+              <p className="text-xs text-faint mb-3">
+                Mailboxes Sentinel is allowed to read.
+              </p>
+
+              {accountsLoading ? (
+                <p className="text-xs text-faint">Loading…</p>
+              ) : accounts.length === 0 ? (
+                <p className="text-xs text-faint">
+                  None yet. Start by connecting <span className="text-muted">{email || 'the account you signed in with'}</span> — granting
+                  calendar access is a separate step from signing in — then add your other accounts.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {accounts.map(a => (
+                    <div key={a.id} className="flex items-center justify-between gap-4 py-1">
+                      <div className="min-w-0">
+                        <p className="text-sm text-fg truncate">{a.email}</p>
+                        <p className="text-xs text-faint mt-0.5 capitalize">
+                          {a.provider} · {a.status}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => disconnect(a.id)}
+                        className="text-xs text-faint hover:text-fg border border-line px-2.5 py-1 rounded-full shrink-0 transition-colors"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          </div>
+          )}
         </div>
 
         <div className="px-5 py-3 border-t border-line text-xs text-faint">
-          Sentinel · local prototype — preferences saved to this browser
+          Sentinel · calendar read-only — your tokens never touch the browser
         </div>
       </div>
     </div>

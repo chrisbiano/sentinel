@@ -36,7 +36,7 @@ function endLabel(startMin, duration) {
   return `${h12}:${mm} ${ampm}`
 }
 
-export default function Timeline({ tasks, events, onToggleSubtask }) {
+export default function Timeline({ tasks, events, onToggleSubtask, calendarLoading, calendarError }) {
   const items = [
     ...tasks.map(t => ({
       id: `t-${t.id}`,
@@ -62,6 +62,17 @@ export default function Timeline({ tasks, events, onToggleSubtask }) {
   return (
     <section>
       <SectionHeader icon={<TimelineIcon />} title="Today's schedule" count={items.length} />
+
+      {/* Calendar sync status — tells you at a glance whether events pulled in */}
+      <p className="text-xs text-faint -mt-2 mb-3">
+        {calendarLoading
+          ? 'Syncing calendar…'
+          : calendarError
+            ? `Calendar error: ${calendarError}`
+            : events.length > 0
+              ? `${events.length} calendar event${events.length === 1 ? '' : 's'} today`
+              : 'No calendar events found for today'}
+      </p>
 
       <div className="card p-0 overflow-hidden">
         <ol className="relative border-l border-line ml-[4.75rem] py-2">

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import useTasks from './hooks/useTasks'
+import useCalendarEvents from './hooks/useCalendarEvents'
 import Layout from './components/Layout'
 import GreetingHeader from './components/GreetingHeader'
 import StatRow from './components/StatRow'
@@ -43,6 +44,22 @@ export default function App() {
 
   const [showGreeting, setShowGreeting] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [notice, setNotice] = useState(null)
+
+  // Google bounces back here after connecting a mailbox — surface the result,
+  // then clean the params out of the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const connected = params.get('connected')
+    const err = params.get('connect_error')
+    if (!connected && !err) return
+    setNotice(
+      connected
+        ? { kind: 'ok', text: `Connected ${connected}` }
+        : { kind: 'err', text: `Couldn't connect that account (${err})` }
+    )
+    window.history.replaceState({}, '', window.location.pathname)
+  }, [])
 
   const [emails, setEmails] = useState([
     {
@@ -69,9 +86,12 @@ export default function App() {
     },
   ])
 
-  // Calendar events — populated from Google Calendar once wired up. The
-  // Timeline already merges these with tasks; empty until the integration lands.
-  const [events] = useState([])
+  // Real events from every connected Google Calendar, merged onto the timeline.
+  const {
+    events,
+    loading: calendarLoading,
+    error: calendarError,
+  } = useCalendarEvents()
 
   const [unsubscribeSuggestions, setUnsubscribeSuggestions] = useState([
     {
@@ -117,6 +137,21 @@ export default function App() {
   return (
     <Layout onOpenSettings={() => setSettingsOpen(true)}>
       <main className="space-y-6">
+        {/* Result of a "connect account" round-trip */}
+        {notice && (
+          <div className="card flex items-center justify-between gap-4">
+            <p className={`text-sm ${notice.kind === 'ok' ? 'text-fg' : 'text-muted'}`}>
+              {notice.text}
+            </p>
+            <button
+              onClick={() => setNotice(null)}
+              className="text-xs text-faint hover:text-fg transition-colors shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Compact greeting bar */}
         {showGreeting && (
           <GreetingHeader
@@ -129,7 +164,13 @@ export default function App() {
         <StatRow tasks={tasks} emails={emails} />
 
         {/* Time-blocked day (Structured-style) */}
-        <Timeline tasks={visibleTasks} events={events} onToggleSubtask={toggleSubtask} />
+        <Timeline
+          tasks={visibleTasks}
+          events={events}
+          onToggleSubtask={toggleSubtask}
+          calendarLoading={calendarLoading}
+          calendarError={calendarError}
+        />
 
         {/* Two-column working area */}
         <div id="working-area" className="grid grid-cols-1 lg:grid-cols-2 gap-6 scroll-mt-20">
