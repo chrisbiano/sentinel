@@ -5,11 +5,22 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 export const isConnectConfigured = Boolean(CLIENT_ID && SUPABASE_URL)
 
-// Read-only Calendar for now; Gmail scope gets added when we wire mail.
+/* Calendar stays read-only — Sentinel annotates blocks in its own store and
+   never writes back to Google.
+ *
+ * Gmail needs `modify` rather than `readonly` because triage is useless if you
+ * can't act on it: marking read, and moving to Trash, both live behind modify.
+ * Notably `modify` cannot permanently delete — that needs Google's blanket
+ * mail scope, which Sentinel deliberately does not ask for. Everything this
+ * app trashes is recoverable in Gmail for 30 days.
+ *
+ * Changing this list means every already-connected account must reconnect to
+ * re-consent. `include_granted_scopes` keeps previously granted access intact. */
 const SCOPES = [
   'openid',
   'email',
   'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/gmail.modify',
 ].join(' ')
 
 /**

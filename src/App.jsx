@@ -3,6 +3,7 @@ import useTasks from './hooks/useTasks'
 import { toISODate } from './lib/tasks'
 import useCalendarEvents from './hooks/useCalendarEvents'
 import useEventNotes from './hooks/useEventNotes'
+import useEmails from './hooks/useEmails'
 import Layout from './components/Layout'
 import GreetingHeader from './components/GreetingHeader'
 import StatRow from './components/StatRow'
@@ -13,7 +14,6 @@ import SearchResults from './components/SearchResults'
 import { weekDays, monthGrid } from './lib/dates'
 import EmailSection from './components/EmailSection'
 import TasksSection from './components/TasksSection'
-import UnsubscribeSection from './components/UnsubscribeSection'
 import SettingsModal from './components/SettingsModal'
 
 const SETTINGS_KEY = 'sentinel.settings.v1'
@@ -70,30 +70,17 @@ export default function App() {
     window.history.replaceState({}, '', window.location.pathname)
   }, [])
 
-  const [emails, setEmails] = useState([
-    {
-      id: 1,
-      from: 'Sarah Chen',
-      sender: 'sarah@rsm.com',
-      subject: 'Project timeline question',
-      preview: 'Can we discuss the delivery timeline for Q3 deliverables?',
-      needsReply: true,
-      flagged: true,
-      unread: true,
-      timestamp: '2 hours ago'
-    },
-    {
-      id: 2,
-      from: 'You',
-      sender: 'chris@fastrosecreative.com',
-      subject: 'Follow up on proposal',
-      preview: 'Marked for follow up - waiting on client feedback',
-      needsReply: true,
-      flagged: false,
-      unread: false,
-      timestamp: '4 hours ago'
-    },
-  ])
+  // Real mail across every connected account, sorted by Claude into reply /
+  // read / unsubscribe / junk. Claude only ever sorts; acting is always a click.
+  const {
+    emails,
+    loading: emailsLoading,
+    remaining: emailsRemaining,
+    error: emailError,
+    accountErrors: emailAccountErrors,
+    clearError: clearEmailError,
+    act: actOnEmail,
+  } = useEmails()
 
   // Real events from every connected Google Calendar, merged onto the timeline.
   // Sentinel always opens on today, in day view; you navigate away deliberately.
@@ -133,39 +120,6 @@ export default function App() {
   useEffect(() => {
     if (events.length) backfillContext(events)
   }, [events, backfillContext])
-
-  const [unsubscribeSuggestions, setUnsubscribeSuggestions] = useState([
-    {
-      id: 1,
-      from: 'Weekly Newsletter',
-      sender: 'newsletter@example.com',
-      reason: 'Recurring newsletter, 0 opens in 60 days',
-      opens: 0,
-      status: 'pending'
-    },
-  ])
-
-  const approveUnsubscribe = (id) => {
-    setUnsubscribeSuggestions(
-      unsubscribeSuggestions.map(item =>
-        item.id === id ? { ...item, status: 'approved' } : item
-      )
-    )
-  }
-
-  const rejectUnsubscribe = (id) => {
-    setUnsubscribeSuggestions(
-      unsubscribeSuggestions.map(item =>
-        item.id === id ? { ...item, status: 'rejected' } : item
-      )
-    )
-  }
-
-  const markReplied = (id) => {
-    setEmails(prev => prev.map(email =>
-      email.id === id ? { ...email, needsReply: false, unread: false } : email
-    ))
-  }
 
   const reviewAll = () => {
     document.getElementById('working-area')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -318,16 +272,16 @@ export default function App() {
             onDeleteSeries={deleteSeries}
             defaultDate={selectedISO}
           />
-          <EmailSection emails={emails} onReply={markReplied} />
+          <EmailSection
+            emails={emails}
+            loading={emailsLoading}
+            remaining={emailsRemaining}
+            error={emailError}
+            accountErrors={emailAccountErrors}
+            onAct={actOnEmail}
+            onClearError={clearEmailError}
+          />
         </div>
-
-
-        {/* Secondary: unsubscribe suggestions */}
-        <UnsubscribeSection
-          suggestions={unsubscribeSuggestions}
-          onApprove={approveUnsubscribe}
-          onReject={rejectUnsubscribe}
-        />
       </main>
 
       <SettingsModal

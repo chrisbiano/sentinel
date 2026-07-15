@@ -53,7 +53,8 @@ function formatHours(mins) {
 
 export default function StatRow({ tasks, events = [], emails, isToday = true }) {
   const openTasks = tasks.filter(t => !t.completed).length
-  const replyEmails = emails.filter(e => e.needsReply).length
+  // Claude's triage bucket, across every connected mailbox.
+  const replyEmails = emails.filter(e => e.action === 'reply').length
 
   // Only timed things occupy the day; general tasks don't book time.
   const blocks = [...tasks.filter(t => t.time), ...events]
