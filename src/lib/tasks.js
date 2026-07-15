@@ -1,10 +1,20 @@
 import { supabase } from './supabase'
 
 // DB columns are snake_case; the app uses camelCase. Map both ways.
+// Local YYYY-MM-DD (not toISOString, which shifts to UTC and can land on the
+// wrong day for evening/early-morning users).
+export function toISODate(d) {
+  const dt = d instanceof Date ? d : new Date(d)
+  const m = String(dt.getMonth() + 1).padStart(2, '0')
+  const day = String(dt.getDate()).padStart(2, '0')
+  return `${dt.getFullYear()}-${m}-${day}`
+}
+
 export function rowToTask(row) {
   return {
     id: row.id,
     title: row.title,
+    date: row.date,
     time: row.time,
     duration: row.duration,
     hasReminder: row.has_reminder,
@@ -16,7 +26,9 @@ export function rowToTask(row) {
 
 export function taskToRow(task, userId) {
   const row = {
+    // null date = unscheduled (lives in the Inbox until it gets a day).
     title: task.title,
+    date: task.date ?? null,
     time: task.time ?? null,
     duration: task.duration ?? 30,
     has_reminder: task.hasReminder ?? false,
@@ -32,6 +44,7 @@ export function taskToRow(task, userId) {
 function patchToRow(patch) {
   const row = {}
   if ('title' in patch) row.title = patch.title
+  if ('date' in patch) row.date = patch.date
   if ('time' in patch) row.time = patch.time
   if ('duration' in patch) row.duration = patch.duration
   if ('hasReminder' in patch) row.has_reminder = patch.hasReminder

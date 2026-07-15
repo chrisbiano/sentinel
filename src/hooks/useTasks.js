@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import { fetchTasks, insertTask, updateTaskRow, deleteTaskRow } from '../lib/tasks'
+import { fetchTasks, insertTask, updateTaskRow, deleteTaskRow, toISODate } from '../lib/tasks'
 
 const TASKS_KEY = 'sentinel.tasks.v1'
 
@@ -78,7 +78,13 @@ export default function useTasks() {
 
   // ---- Handlers (optimistic local update + DB write when configured) ----
   const addTask = useCallback(async (data) => {
-    const base = { isUrgent: false, completed: false, subtasks: [], ...data }
+    const base = {
+      isUrgent: false,
+      completed: false,
+      subtasks: [],
+      date: toISODate(new Date()),
+      ...data,
+    }
     if (isSupabaseConfigured) {
       try {
         const created = await insertTask(base, userIdRef.current)

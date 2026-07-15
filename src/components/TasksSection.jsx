@@ -58,7 +58,7 @@ function PlusIcon() {
   )
 }
 
-export default function TasksSection({ tasks, onToggleReminder, onToggleComplete, onAdd, onUpdate, onDelete }) {
+export default function TasksSection({ tasks, onToggleReminder, onToggleComplete, onAdd, onUpdate, onDelete, defaultDate }) {
   const [form, setForm] = useState(null) // null | 'new' | taskId
 
   const closeForm = () => setForm(null)
@@ -82,6 +82,7 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
       <div className="space-y-3">
         {form === 'new' && (
           <TaskForm
+            defaultDate={defaultDate}
             onSave={(data) => { onAdd(data); closeForm() }}
             onCancel={closeForm}
           />
@@ -92,6 +93,7 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
             <TaskForm
               key={task.id}
               initial={task}
+              defaultDate={defaultDate}
               onSave={(data) => { onUpdate(task.id, data); closeForm() }}
               onCancel={closeForm}
             />
@@ -110,8 +112,14 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
                     {task.title}
                   </h3>
                   <div className="flex items-center gap-3 mt-2 text-sm text-muted">
-                    <span className="flex items-center gap-1.5"><ClockIcon /> {task.time}</span>
-                    <span className="text-faint">{task.duration} min</span>
+                    {task.time ? (
+                      <>
+                        <span className="flex items-center gap-1.5"><ClockIcon /> {task.time}</span>
+                        <span className="text-faint">{task.duration} min</span>
+                      </>
+                    ) : (
+                      <span className="text-faint">Anytime</span>
+                    )}
                     {task.subtasks?.length > 0 && (
                       <span className="text-faint tabular-nums">
                         {task.subtasks.filter(s => s.done).length}/{task.subtasks.length} subtasks

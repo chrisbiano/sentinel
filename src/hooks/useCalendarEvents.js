@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { toISODate } from '../lib/tasks'
 
 // The function returns ISO timestamps; the browser knows the user's timezone,
 // so we format to local time here rather than guessing on the server.
@@ -14,25 +15,29 @@ function minutesBetween(startIso, endIso) {
   return mins > 0 ? mins : 30
 }
 
-// Today, in the user's local timezone.
-function dayBounds() {
-  const start = new Date(); start.setHours(0, 0, 0, 0)
-  const end = new Date(); end.setHours(23, 59, 59, 999)
-  return { timeMin: start.toISOString(), timeMax: end.toISOString() }
-}
-
-export default function useCalendarEvents() {
+/**
+ * Events across every connected calendar for an inclusive date range, in the
+ * user's local timezone. Day view passes the same date twice; week view passes
+ * the week's bounds.
+ */
+export default function useCalendarEvents(rangeStart, rangeEnd) {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(isSupabaseConfigured)
   const [error, setError] = useState(null)
+
+  // Primitive keys so the effect re-runs when the range changes, not every render.
+  const startKey = toISODate(rangeStart)
+  const endKey = toISODate(rangeEnd ?? rangeStart)
 
   const refresh = useCallback(async () => {
     if (!isSupabaseConfigured) { setLoading(false); return }
     setLoading(true)
     setError(null)
     try {
+      const start = new Date(`${startKey}T00:00:00`)
+      const end = new Date(`${endKey}T23:59:59`)
       const { data, error: fnError } = await supabase.functions.invoke('calendar-events', {
-        body: dayBounds(),
+        body: { timeMin: start.toISOString(), timeMax: end.toISOString() },
       })
       if (fnError) throw fnError
       const normalized = (data?.events ?? [])
@@ -40,6 +45,7 @@ export default function useCalendarEvents() {
         .map(e => ({
           id: e.id,
           title: e.title,
+          date: toISODate(new Date(e.start)),
           time: toTimeLabel(e.start),
           duration: e.end ? minutesBetween(e.start, e.end) : 30,
           account: e.account,
@@ -51,7 +57,7 @@ export default function useCalendarEvents() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [startKey, endKey])
 
   useEffect(() => { refresh() }, [refresh])
 

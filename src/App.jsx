@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react'
 import useTasks from './hooks/useTasks'
+import { toISODate } from './lib/tasks'
 import useCalendarEvents from './hooks/useCalendarEvents'
+import useEventNotes from './hooks/useEventNotes'
 import Layout from './components/Layout'
 import GreetingHeader from './components/GreetingHeader'
 import StatRow from './components/StatRow'
 import Timeline from './components/Timeline'
+import WeekView from './components/WeekView'
+import MonthView from './components/MonthView'
+import { weekDays, monthGrid } from './lib/dates'
 import EmailSection from './components/EmailSection'
 import TasksSection from './components/TasksSection'
 import UnsubscribeSection from './components/UnsubscribeSection'
@@ -87,11 +92,32 @@ export default function App() {
   ])
 
   // Real events from every connected Google Calendar, merged onto the timeline.
+  // Sentinel always opens on today, in day view; you navigate away deliberately.
+  const [selectedDate, setSelectedDate] = useState(() => new Date())
+  const [view, setView] = useState('day')
+  const selectedISO = toISODate(selectedDate)
+
+  // Each view fetches exactly the span it shows.
+  const week = weekDays(selectedDate)
+  const month = monthGrid(selectedDate)
+  const rangeStart = view === 'week' ? week[0] : view === 'month' ? month[0] : selectedDate
+  const rangeEnd = view === 'week' ? week[6] : view === 'month' ? month[month.length - 1] : selectedDate
+
   const {
     events,
     loading: calendarLoading,
     error: calendarError,
-  } = useCalendarEvents()
+  } = useCalendarEvents(rangeStart, rangeEnd)
+
+  const dayEvents = events.filter(e => e.date === selectedISO)
+
+  // Sentinel-side prep checklists layered onto calendar blocks.
+  const {
+    notes: eventNotes,
+    addSubtask: addEventSubtask,
+    toggleSubtask: toggleEventSubtask,
+    removeSubtask: removeEventSubtask,
+  } = useEventNotes()
 
   const [unsubscribeSuggestions, setUnsubscribeSuggestions] = useState([
     {
@@ -130,9 +156,13 @@ export default function App() {
     document.getElementById('working-area')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  // Dated tasks belong to their day. A general task (no date) just lives under
+  // Today's tasks until it's done.
+  const isTodayView = selectedISO === toISODate(new Date())
+  const dayTasks = tasks.filter(t => t.date === selectedISO || (!t.date && isTodayView))
   const visibleTasks = settings.hideCompleted
-    ? tasks.filter(t => !t.completed)
-    : tasks
+    ? dayTasks.filter(t => !t.completed)
+    : dayTasks
 
   return (
     <Layout onOpenSettings={() => setSettingsOpen(true)}>
@@ -163,14 +193,50 @@ export default function App() {
         {/* At-a-glance stats */}
         <StatRow tasks={tasks} emails={emails} />
 
-        {/* Time-blocked day (Structured-style) */}
-        <Timeline
-          tasks={visibleTasks}
-          events={events}
-          onToggleSubtask={toggleSubtask}
-          calendarLoading={calendarLoading}
-          calendarError={calendarError}
-        />
+        {/* Time-blocked day, or the whole week for planning ahead */}
+        {view === 'day' ? (
+          <Timeline
+            tasks={visibleTasks}
+            events={dayEvents}
+            onToggleSubtask={toggleSubtask}
+            calendarLoading={calendarLoading}
+            calendarError={calendarError}
+            eventNotes={eventNotes}
+            onAddEventSubtask={addEventSubtask}
+            onToggleEventSubtask={toggleEventSubtask}
+            onRemoveEventSubtask={removeEventSubtask}
+            selectedDate={selectedDate}
+            onChangeDate={setSelectedDate}
+            defaultDate={selectedISO}
+            onAddTask={addTask}
+            view={view}
+            onChangeView={setView}
+          />
+        ) : view === 'week' ? (
+          <WeekView
+            tasks={tasks}
+            events={events}
+            selectedDate={selectedDate}
+            onChangeDate={setSelectedDate}
+            onAddTask={addTask}
+            onToggleComplete={toggleComplete}
+            view={view}
+            onChangeView={setView}
+            calendarLoading={calendarLoading}
+            calendarError={calendarError}
+          />
+        ) : (
+          <MonthView
+            tasks={tasks}
+            events={events}
+            selectedDate={selectedDate}
+            onChangeDate={setSelectedDate}
+            view={view}
+            onChangeView={setView}
+            calendarLoading={calendarLoading}
+            calendarError={calendarError}
+          />
+        )}
 
         {/* Two-column working area */}
         <div id="working-area" className="grid grid-cols-1 lg:grid-cols-2 gap-6 scroll-mt-20">
@@ -181,9 +247,11 @@ export default function App() {
             onAdd={addTask}
             onUpdate={updateTask}
             onDelete={deleteTask}
+            defaultDate={selectedISO}
           />
           <EmailSection emails={emails} onReply={markReplied} />
         </div>
+
 
         {/* Secondary: unsubscribe suggestions */}
         <UnsubscribeSection

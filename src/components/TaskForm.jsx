@@ -35,11 +35,14 @@ function to24Display(hhmm) {
   return `${h12}:${String(M || 0).padStart(2, '0')} ${ampm}`
 }
 
-export default function TaskForm({ initial, onSave, onCancel }) {
+export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
   const [title, setTitle] = useState(initial?.title || '')
+  const [date, setDate] = useState(initial?.date || defaultDate)
   const [time, setTime] = useState(initial ? displayTo24(initial.time) : '09:00')
   const [duration, setDuration] = useState(initial?.duration ?? 30)
   const [hasReminder, setHasReminder] = useState(initial?.hasReminder ?? false)
+  // An existing task with no date came from the Inbox.
+  const [unscheduled, setUnscheduled] = useState(initial ? !initial.date : false)
   const [subtasks, setSubtasks] = useState(
     initial?.subtasks?.map(s => ({ ...s })) ?? []
   )
@@ -54,7 +57,8 @@ export default function TaskForm({ initial, onSave, onCancel }) {
     if (!title.trim()) return
     onSave({
       title: title.trim(),
-      time: to24Display(time),
+      date: unscheduled ? null : date,
+      time: unscheduled ? null : to24Display(time),
       duration: Number(duration) || 30,
       hasReminder,
       subtasks: subtasks
@@ -72,7 +76,27 @@ export default function TaskForm({ initial, onSave, onCancel }) {
         placeholder="Task title"
         className="input w-full"
       />
+      <label className="flex items-center gap-2 text-sm text-muted">
+        <input
+          type="checkbox"
+          checked={unscheduled}
+          onChange={e => setUnscheduled(e.target.checked)}
+          className="w-4 h-4 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0"
+        />
+        No date or time — just a general task
+      </label>
+
+      {!unscheduled && (
       <div className="flex flex-wrap gap-3">
+        <label className="flex flex-col gap-1 text-xs text-faint">
+          Date
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            className="input"
+          />
+        </label>
         <label className="flex flex-col gap-1 text-xs text-faint">
           Start
           <input
@@ -103,6 +127,7 @@ export default function TaskForm({ initial, onSave, onCancel }) {
           Reminder
         </label>
       </div>
+      )}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs text-faint">Subtasks</span>

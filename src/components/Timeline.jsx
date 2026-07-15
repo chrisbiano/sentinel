@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import SectionHeader from './SectionHeader'
+import TaskForm from './TaskForm'
+import ViewSwitcher from './ViewSwitcher'
 
 function TimelineIcon() {
   return (
@@ -36,9 +39,47 @@ function endLabel(startMin, duration) {
   return `${h12}:${mm} ${ampm}`
 }
 
-export default function Timeline({ tasks, events, onToggleSubtask, calendarLoading, calendarError }) {
+export default function Timeline({
+  tasks,
+  events,
+  onToggleSubtask,
+  calendarLoading,
+  calendarError,
+  eventNotes = {},
+  onAddEventSubtask,
+  onToggleEventSubtask,
+  onRemoveEventSubtask,
+  selectedDate,
+  onChangeDate,
+  defaultDate,
+  onAddTask,
+  view,
+  onChangeView,
+}) {
+  const [addingFor, setAddingFor] = useState(null)  // event id with an open input
+  const [draft, setDraft] = useState('')
+  const [addingTask, setAddingTask] = useState(false)
+
+  const submitSubtask = (eventId) => {
+    onAddEventSubtask(eventId, draft)
+    setDraft('')
+    setAddingFor(null)
+  }
+
+  const isToday = new Date(selectedDate).toDateString() === new Date().toDateString()
+  const dayLabel = new Date(selectedDate).toLocaleDateString('en-US', {
+    weekday: 'long', month: 'short', day: 'numeric',
+  })
+  const shiftDay = (delta) => {
+    const next = new Date(selectedDate)
+    next.setDate(next.getDate() + delta)
+    onChangeDate(next)
+  }
+
   const items = [
-    ...tasks.map(t => ({
+    // General tasks (no time) have no slot on a time rail — they live in the
+    // task list instead.
+    ...tasks.filter(t => t.time).map(t => ({
       id: `t-${t.id}`,
       rawId: t.id,
       title: t.title,
@@ -51,17 +92,51 @@ export default function Timeline({ tasks, events, onToggleSubtask, calendarLoadi
     })),
     ...events.map(e => ({
       id: `e-${e.id}`,
+      rawId: e.id,                        // key for Sentinel's event checklists
       title: e.title,
       time: e.time,
       duration: e.duration,
       kind: 'event',
-      subtasks: [],
+      subtasks: eventNotes[e.id] || [],
     })),
   ].sort((a, b) => toMinutes(a.time) - toMinutes(b.time))
 
   return (
     <section>
-      <SectionHeader icon={<TimelineIcon />} title="Today's schedule" count={items.length} />
+      <SectionHeader
+        icon={<TimelineIcon />}
+        title={isToday ? "Today's schedule" : dayLabel}
+        count={items.length}
+        action={
+          <div className="flex items-center gap-2">
+            <ViewSwitcher value={view} onChange={onChangeView} />
+            <div className="flex items-center gap-1">
+            <button
+              onClick={() => shiftDay(-1)}
+              aria-label="Previous day"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-faint hover:text-fg hover:bg-surface2 transition-colors"
+            >
+              ‹
+            </button>
+            {!isToday && (
+              <button
+                onClick={() => onChangeDate(new Date())}
+                className="text-xs font-medium text-muted hover:text-fg border border-line2 rounded-lg px-2 py-1 transition-colors"
+              >
+                Today
+              </button>
+            )}
+            <button
+              onClick={() => shiftDay(1)}
+              aria-label="Next day"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-faint hover:text-fg hover:bg-surface2 transition-colors"
+            >
+              ›
+            </button>
+            </div>
+          </div>
+        }
+      />
 
       {/* Calendar sync status — tells you at a glance whether events pulled in */}
       <p className="text-xs text-faint -mt-2 mb-3">
@@ -70,11 +145,28 @@ export default function Timeline({ tasks, events, onToggleSubtask, calendarLoadi
           : calendarError
             ? `Calendar error: ${calendarError}`
             : events.length > 0
-              ? `${events.length} calendar event${events.length === 1 ? '' : 's'} today`
-              : 'No calendar events found for today'}
+              ? `${events.length} calendar event${events.length === 1 ? '' : 's'} ${isToday ? 'today' : 'this day'}`
+              : `No calendar events ${isToday ? 'today' : 'on this day'}`}
       </p>
 
       <div className="card p-0 overflow-hidden">
+        {items.length === 0 ? (
+          <div className="px-5 py-10 text-center">
+            <p className="text-sm text-muted">
+              Nothing scheduled {isToday ? 'today' : `for ${dayLabel}`}.
+            </p>
+            <p className="text-xs text-faint mt-1">
+              Add a task to start shaping this day.
+            </p>
+            <button
+              onClick={() => setAddingTask(true)}
+              className="mt-4 px-4 py-2 bg-accent text-accent-fg rounded-lg font-medium text-sm hover:opacity-90 transition-opacity"
+            >
+              + Add task
+            </button>
+          </div>
+        ) : (
+          <>
         <ol className="relative border-l border-line ml-[4.75rem] py-2">
           {items.map(item => (
             <li key={item.id} className="relative pl-6 pr-4 py-2.5">
@@ -115,25 +207,96 @@ export default function Timeline({ tasks, events, onToggleSubtask, calendarLoadi
                 {item.subtasks.length > 0 && (
                   <ul className="mt-2.5 space-y-1.5">
                     {item.subtasks.map(s => (
-                      <li key={s.id} className="flex items-center gap-2">
+                      <li key={s.id} className="flex items-center gap-2 group">
                         <input
                           type="checkbox"
                           checked={s.done}
-                          onChange={() => onToggleSubtask(item.rawId, s.id)}
+                          onChange={() =>
+                            item.kind === 'event'
+                              ? onToggleEventSubtask(item.rawId, s.id)
+                              : onToggleSubtask(item.rawId, s.id)
+                          }
                           className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer"
                         />
                         <span className={`text-xs ${s.done ? 'line-through text-faint' : 'text-muted'}`}>
                           {s.title}
                         </span>
+                        {item.kind === 'event' && (
+                          <button
+                            onClick={() => onRemoveEventSubtask(item.rawId, s.id)}
+                            aria-label="Remove subtask"
+                            className="text-faint hover:text-fg opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-xs"
+                          >
+                            ×
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>
+                )}
+
+                {/* Prep checklist on a calendar block — stored in Sentinel, never
+                    written back to Google. */}
+                {item.kind === 'event' && (
+                  addingFor === item.rawId ? (
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        autoFocus
+                        value={draft}
+                        onChange={e => setDraft(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') submitSubtask(item.rawId)
+                          if (e.key === 'Escape') { setDraft(''); setAddingFor(null) }
+                        }}
+                        placeholder="What needs doing in this block?"
+                        className="input flex-1 py-1 text-xs"
+                      />
+                      <button
+                        onClick={() => submitSubtask(item.rawId)}
+                        className="text-xs px-2 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
+                      >
+                        Add
+                      </button>
+                      <button
+                        onClick={() => { setDraft(''); setAddingFor(null) }}
+                        className="text-xs text-faint hover:text-fg transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setDraft(''); setAddingFor(item.rawId) }}
+                      className="mt-2 text-xs text-faint hover:text-fg transition-colors"
+                    >
+                      + Add subtask
+                    </button>
+                  )
                 )}
               </div>
             </li>
           ))}
         </ol>
+            <button
+              onClick={() => setAddingTask(true)}
+              className="w-full text-left px-5 py-3 border-t border-line text-xs text-faint hover:text-fg hover:bg-surface2 transition-colors"
+            >
+              + Add task to this day
+            </button>
+          </>
+        )}
       </div>
+
+      {/* Add straight from the schedule — no jumping to another section. */}
+      {addingTask && (
+        <div className="mt-3">
+          <TaskForm
+            defaultDate={defaultDate}
+            onSave={(data) => { onAddTask(data); setAddingTask(false) }}
+            onCancel={() => setAddingTask(false)}
+          />
+        </div>
+      )}
     </section>
   )
 }
