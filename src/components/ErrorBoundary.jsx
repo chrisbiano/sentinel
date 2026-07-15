@@ -20,10 +20,14 @@ export default class ErrorBoundary extends Component {
     if (this.state.error) {
       return (
         <div className="min-h-screen bg-bg text-fg flex items-center justify-center p-6">
-          <div className="card max-w-md w-full text-center">
+          <div className="card max-w-lg w-full text-center">
             <h1 className="text-lg font-medium mb-2">Something went wrong</h1>
             <p className="text-muted text-sm mb-4">
               Sentinel hit an unexpected error. Your saved data is safe.
+            </p>
+            {/* Show the actual message — a generic apology helps nobody debug. */}
+            <p className="text-xs text-muted text-left bg-surface2 border border-line rounded-lg p-3 mb-4 font-mono break-words">
+              {String(this.state.error?.message || this.state.error)}
             </p>
             <button
               onClick={() => this.setState({ error: null })}

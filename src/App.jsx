@@ -9,6 +9,7 @@ import StatRow from './components/StatRow'
 import Timeline from './components/Timeline'
 import WeekView from './components/WeekView'
 import MonthView from './components/MonthView'
+import SearchResults from './components/SearchResults'
 import { weekDays, monthGrid } from './lib/dates'
 import EmailSection from './components/EmailSection'
 import TasksSection from './components/TasksSection'
@@ -120,7 +121,18 @@ export default function App() {
     addSubtask: addEventSubtask,
     toggleSubtask: toggleEventSubtask,
     removeSubtask: removeEventSubtask,
+    toggleDone: toggleEventDone,
+    backfillContext,
   } = useEventNotes()
+
+  const [search, setSearch] = useState('')
+  const searching = search.trim().length > 0
+
+  // Older notes are missing their event context; fill it in whenever the real
+  // event is on screen, so they become searchable without any action from you.
+  useEffect(() => {
+    if (events.length) backfillContext(events)
+  }, [events, backfillContext])
 
   const [unsubscribeSuggestions, setUnsubscribeSuggestions] = useState([
     {
@@ -216,8 +228,39 @@ export default function App() {
           isToday={isTodayView}
         />
 
-        {/* Time-blocked day, or the whole week for planning ahead */}
-        {view === 'day' ? (
+        {/* Search everything on record — tasks, annotated blocks, their subtasks */}
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+            </svg>
+          </span>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search your work — e.g. “Champions for Growth”"
+            className="input w-full pl-10 pr-16"
+          />
+          {searching && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-faint hover:text-fg transition-colors"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        {/* Searching takes over the schedule area; clearing returns you to it. */}
+        {searching ? (
+          <SearchResults
+            tasks={tasks}
+            eventNotes={eventNotes}
+            query={search}
+            onChangeDate={(d) => { setSelectedDate(d); setView('day'); setSearch('') }}
+          />
+        ) : view === 'day' ? (
           <Timeline
             tasks={visibleTasks}
             events={dayEvents}
@@ -228,6 +271,7 @@ export default function App() {
             onAddEventSubtask={addEventSubtask}
             onToggleEventSubtask={toggleEventSubtask}
             onRemoveEventSubtask={removeEventSubtask}
+            onToggleEventDone={toggleEventDone}
             selectedDate={selectedDate}
             onChangeDate={setSelectedDate}
             defaultDate={selectedISO}

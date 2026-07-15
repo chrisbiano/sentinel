@@ -49,6 +49,7 @@ export default function Timeline({
   onAddEventSubtask,
   onToggleEventSubtask,
   onRemoveEventSubtask,
+  onToggleEventDone,
   selectedDate,
   onChangeDate,
   defaultDate,
@@ -61,8 +62,14 @@ export default function Timeline({
   const [draft, setDraft] = useState('')
   const [addingTask, setAddingTask] = useState(false)
 
-  const submitSubtask = (eventId) => {
-    onAddEventSubtask(eventId, draft)
+  // Event handlers take the block's context, not just its id, so the saved note
+  // stays readable even if the event later disappears from Google.
+  const metaOf = (item) => ({
+    id: item.rawId, title: item.title, date: item.date, time: item.time,
+  })
+
+  const submitSubtask = (item) => {
+    onAddEventSubtask(metaOf(item), draft)
     setDraft('')
     setAddingFor(null)
   }
@@ -93,12 +100,14 @@ export default function Timeline({
     })),
     ...events.map(e => ({
       id: `e-${e.id}`,
-      rawId: e.id,                        // key for Sentinel's event checklists
+      rawId: e.id,                        // key for Sentinel's event annotations
       title: e.title,
+      date: e.date,
       time: e.time,
       duration: e.duration,
       kind: 'event',
-      subtasks: eventNotes[e.id] || [],
+      subtasks: eventNotes[e.id]?.subtasks || [],
+      done: eventNotes[e.id]?.done || false,
     })),
   ].sort((a, b) => toMinutes(a.time) - toMinutes(b.time))
 
@@ -183,17 +192,19 @@ export default function Timeline({
               {/* block */}
               <div className={item.done ? 'opacity-50' : ''}>
                 <div className="flex items-center gap-2">
-                  {/* Check a task off right here — no scrolling to the list.
-                      Events come from Google and aren't ours to complete. */}
-                  {item.kind === 'task' && (
-                    <input
-                      type="checkbox"
-                      checked={item.done}
-                      onChange={() => onToggleComplete(item.rawId)}
-                      aria-label={`Mark ${item.title} complete`}
-                      className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer shrink-0"
-                    />
-                  )}
+                  {/* Check anything off right here. For events this is Sentinel's
+                      own "wrapped up" flag — Google's copy is never touched. */}
+                  <input
+                    type="checkbox"
+                    checked={item.done}
+                    onChange={() =>
+                      item.kind === 'event'
+                        ? onToggleEventDone(metaOf(item))
+                        : onToggleComplete(item.rawId)
+                    }
+                    aria-label={`Mark ${item.title} ${item.kind === 'event' ? 'wrapped up' : 'complete'}`}
+                    className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer shrink-0"
+                  />
                   <h3 className={`font-medium text-sm ${item.done ? 'line-through text-faint' : 'text-fg'}`}>
                     {item.title}
                   </h3>
@@ -224,7 +235,7 @@ export default function Timeline({
                           checked={s.done}
                           onChange={() =>
                             item.kind === 'event'
-                              ? onToggleEventSubtask(item.rawId, s.id)
+                              ? onToggleEventSubtask(metaOf(item), s.id)
                               : onToggleSubtask(item.rawId, s.id)
                           }
                           className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer"
@@ -234,7 +245,7 @@ export default function Timeline({
                         </span>
                         {item.kind === 'event' && (
                           <button
-                            onClick={() => onRemoveEventSubtask(item.rawId, s.id)}
+                            onClick={() => onRemoveEventSubtask(metaOf(item), s.id)}
                             aria-label="Remove subtask"
                             className="text-faint hover:text-fg opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-xs"
                           >
@@ -256,14 +267,14 @@ export default function Timeline({
                         value={draft}
                         onChange={e => setDraft(e.target.value)}
                         onKeyDown={e => {
-                          if (e.key === 'Enter') submitSubtask(item.rawId)
+                          if (e.key === 'Enter') submitSubtask(item)
                           if (e.key === 'Escape') { setDraft(''); setAddingFor(null) }
                         }}
                         placeholder="What needs doing in this block?"
                         className="input flex-1 py-1 text-xs"
                       />
                       <button
-                        onClick={() => submitSubtask(item.rawId)}
+                        onClick={() => submitSubtask(item)}
                         className="text-xs px-2 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
                       >
                         Add
