@@ -53,6 +53,7 @@ export default function Timeline({
   onChangeDate,
   defaultDate,
   onAddTask,
+  onToggleComplete,
   view,
   onChangeView,
 }) {
@@ -106,7 +107,6 @@ export default function Timeline({
       <SectionHeader
         icon={<TimelineIcon />}
         title={isToday ? "Today's schedule" : dayLabel}
-        count={items.length}
         action={
           <div className="flex items-center gap-2">
             <ViewSwitcher value={view} onChange={onChangeView} />
@@ -183,6 +183,17 @@ export default function Timeline({
               {/* block */}
               <div className={item.done ? 'opacity-50' : ''}>
                 <div className="flex items-center gap-2">
+                  {/* Check a task off right here — no scrolling to the list.
+                      Events come from Google and aren't ours to complete. */}
+                  {item.kind === 'task' && (
+                    <input
+                      type="checkbox"
+                      checked={item.done}
+                      onChange={() => onToggleComplete(item.rawId)}
+                      aria-label={`Mark ${item.title} complete`}
+                      className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer shrink-0"
+                    />
+                  )}
                   <h3 className={`font-medium text-sm ${item.done ? 'line-through text-faint' : 'text-fg'}`}>
                     {item.title}
                   </h3>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { RECURRENCE_OPTIONS, DAY_LABELS, encodeWeekly } from '../lib/recurrence'
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 
@@ -41,8 +42,25 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
   const [time, setTime] = useState(initial ? displayTo24(initial.time) : '09:00')
   const [duration, setDuration] = useState(initial?.duration ?? 30)
   const [hasReminder, setHasReminder] = useState(initial?.hasReminder ?? false)
-  // An existing task with no date came from the Inbox.
   const [unscheduled, setUnscheduled] = useState(initial ? !initial.date : false)
+  // Repeats are chosen when creating; editing one occurrence doesn't reshape the series.
+  const [recurrence, setRecurrence] = useState('')
+  // Default the weekly picker to the day the task itself falls on.
+  const [weeklyDays, setWeeklyDays] = useState(
+    () => [new Date(`${initial?.date || defaultDate}T00:00:00`).getDay()]
+  )
+  const isEditing = Boolean(initial?.id)
+
+  const toggleWeekday = (d) =>
+    setWeeklyDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
+
+  const resolvedRecurrence = () => {
+    if (unscheduled || isEditing || !recurrence) return null
+    if (recurrence === 'weekly') {
+      return weeklyDays.length ? encodeWeekly(weeklyDays) : null
+    }
+    return recurrence
+  }
   const [subtasks, setSubtasks] = useState(
     initial?.subtasks?.map(s => ({ ...s })) ?? []
   )
@@ -60,6 +78,7 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
       date: unscheduled ? null : date,
       time: unscheduled ? null : to24Display(time),
       duration: Number(duration) || 30,
+      recurrence: resolvedRecurrence(),
       hasReminder,
       subtasks: subtasks
         .map(s => ({ ...s, title: s.title.trim() }))
@@ -127,6 +146,48 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
           Reminder
         </label>
       </div>
+      )}
+
+      {!unscheduled && !isEditing && (
+        <div className="space-y-2">
+          <label className="flex flex-col gap-1 text-xs text-faint">
+            Repeat
+            <select
+              value={recurrence}
+              onChange={e => setRecurrence(e.target.value)}
+              className="input"
+            >
+              {RECURRENCE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+
+          {recurrence === 'weekly' && (
+            <div>
+              <div className="flex gap-1">
+                {DAY_LABELS.map((label, d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => toggleWeekday(d)}
+                    aria-pressed={weeklyDays.includes(d)}
+                    className={`w-8 h-8 rounded-full text-xs font-medium transition-colors ${
+                      weeklyDays.includes(d)
+                        ? 'bg-accent text-accent-fg'
+                        : 'border border-line2 text-muted hover:text-fg'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {weeklyDays.length === 0 && (
+                <p className="text-xs text-faint mt-1.5">Pick at least one day.</p>
+              )}
+            </div>
+          )}
+        </div>
       )}
       <div className="space-y-2">
         <div className="flex items-center justify-between">

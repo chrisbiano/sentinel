@@ -1,3 +1,5 @@
+import { toMinutes } from '../lib/dates'
+
 function IconCheck() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -14,23 +16,53 @@ function IconMail() {
     </svg>
   )
 }
-function IconFocus() {
+function IconClock() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
       strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-      <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" />
+      <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
     </svg>
   )
 }
 
-export default function StatRow({ tasks, emails }) {
-  const upcomingTasks = tasks.filter(t => !t.completed).length
+/**
+ * Total time actually booked for the day. Overlapping blocks are merged, so a
+ * double-booked hour counts once rather than inflating the total. No assumption
+ * about waking hours — it's just arithmetic on what's really scheduled.
+ */
+function scheduledMinutes(blocks) {
+  const intervals = blocks
+    .map(b => [toMinutes(b.time), toMinutes(b.time) + (b.duration || 30)])
+    .filter(([s, e]) => e > s)
+    .sort((a, b) => a[0] - b[0])
+
+  const merged = []
+  for (const iv of intervals) {
+    const last = merged[merged.length - 1]
+    if (last && iv[0] <= last[1]) last[1] = Math.max(last[1], iv[1])
+    else merged.push([...iv])
+  }
+  return merged.reduce((sum, [s, e]) => sum + (e - s), 0)
+}
+
+function formatHours(mins) {
+  if (mins <= 0) return '0h'
+  const h = mins / 60
+  return `${h % 1 === 0 ? h : h.toFixed(1)}h`
+}
+
+export default function StatRow({ tasks, events = [], emails, isToday = true }) {
+  const openTasks = tasks.filter(t => !t.completed).length
   const replyEmails = emails.filter(e => e.needsReply).length
 
+  // Only timed things occupy the day; general tasks don't book time.
+  const blocks = [...tasks.filter(t => t.time), ...events]
+  const scheduled = scheduledMinutes(blocks)
+
   const stats = [
-    { value: upcomingTasks, label: 'Tasks today', icon: <IconCheck />, accent: false },
+    { value: openTasks, label: isToday ? 'Tasks today' : 'Tasks', icon: <IconCheck />, accent: false },
     { value: replyEmails, label: 'Need reply', icon: <IconMail />, accent: true },
-    { value: 2, label: 'Focus blocks', icon: <IconFocus />, accent: false },
+    { value: formatHours(scheduled), label: isToday ? 'Scheduled today' : 'Scheduled', icon: <IconClock />, accent: false },
   ]
 
   return (

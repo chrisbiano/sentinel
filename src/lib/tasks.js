@@ -14,6 +14,8 @@ export function rowToTask(row) {
   return {
     id: row.id,
     title: row.title,
+    seriesId: row.series_id ?? null,
+    recurrence: row.recurrence ?? null,
     date: row.date,
     time: row.time,
     duration: row.duration,
@@ -36,6 +38,8 @@ export function taskToRow(task, userId) {
     completed: task.completed ?? false,
     subtasks: task.subtasks ?? [],
   }
+  if (task.seriesId) row.series_id = task.seriesId
+  if (task.recurrence) row.recurrence = task.recurrence
   if (userId) row.user_id = userId
   return row
 }
@@ -80,5 +84,25 @@ export async function updateTaskRow(id, patch) {
 
 export async function deleteTaskRow(id) {
   const { error } = await supabase.from('tasks').delete().eq('id', id)
+  if (error) throw error
+}
+
+// Create every occurrence of a repeating task in one round trip.
+export async function insertTasks(tasksArr, userId) {
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert(tasksArr.map(t => taskToRow(t, userId)))
+    .select()
+  if (error) throw error
+  return data.map(rowToTask)
+}
+
+// Drop the rest of a series from `fromDate` on, leaving past occurrences as history.
+export async function deleteSeriesFrom(seriesId, fromDate) {
+  const { error } = await supabase
+    .from('tasks')
+    .delete()
+    .eq('series_id', seriesId)
+    .gte('date', fromDate)
   if (error) throw error
 }

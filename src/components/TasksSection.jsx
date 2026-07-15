@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import SectionHeader from './SectionHeader'
 import TaskForm from './TaskForm'
+import { recurrenceLabel } from '../lib/recurrence'
 
 function TaskIcon() {
   return (
@@ -58,8 +59,9 @@ function PlusIcon() {
   )
 }
 
-export default function TasksSection({ tasks, onToggleReminder, onToggleComplete, onAdd, onUpdate, onDelete, defaultDate }) {
+export default function TasksSection({ tasks, onToggleReminder, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, defaultDate }) {
   const [form, setForm] = useState(null) // null | 'new' | taskId
+  const [confirmDelete, setConfirmDelete] = useState(null) // taskId of a repeating task
 
   const closeForm = () => setForm(null)
 
@@ -120,6 +122,9 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
                     ) : (
                       <span className="text-faint">Anytime</span>
                     )}
+                    {task.recurrence && (
+                      <span className="text-faint">↻ {recurrenceLabel(task.recurrence)}</span>
+                    )}
                     {task.subtasks?.length > 0 && (
                       <span className="text-faint tabular-nums">
                         {task.subtasks.filter(s => s.done).length}/{task.subtasks.length} subtasks
@@ -154,7 +159,7 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
                     <EditIcon />
                   </button>
                   <button
-                    onClick={() => onDelete(task.id)}
+                    onClick={() => task.seriesId ? setConfirmDelete(task.id) : onDelete(task.id)}
                     aria-label="Delete task"
                     className="w-8 h-8 flex items-center justify-center rounded-lg text-faint hover:text-fg hover:bg-surface2 transition-colors"
                   >
@@ -162,6 +167,33 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
                   </button>
                 </div>
               </div>
+
+              {/* Repeating tasks: delete just today's, or stop the series here. */}
+              {confirmDelete === task.id && (
+                <div className="mt-3 pt-3 border-t border-line flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-muted">This task repeats — delete…</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { onDelete(task.id); setConfirmDelete(null) }}
+                      className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg transition-colors"
+                    >
+                      Just this one
+                    </button>
+                    <button
+                      onClick={() => { onDeleteSeries(task.seriesId, task.date); setConfirmDelete(null) }}
+                      className="text-xs px-2.5 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
+                    >
+                      This & all future
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(null)}
+                      className="text-xs text-faint hover:text-fg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )
         )}

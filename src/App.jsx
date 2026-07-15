@@ -24,9 +24,12 @@ export default function App() {
     addTask,
     updateTask,
     deleteTask,
+    deleteSeries,
     toggleReminder,
     toggleComplete,
     toggleSubtask,
+    error: taskError,
+    clearError: clearTaskError,
   } = useTasks()
 
   const [settings, setSettings] = useState(() => {
@@ -167,6 +170,21 @@ export default function App() {
   return (
     <Layout onOpenSettings={() => setSettingsOpen(true)}>
       <main className="space-y-6">
+        {/* A save that failed should say so, not quietly vanish */}
+        {taskError && (
+          <div className="card card-border-accent flex items-center justify-between gap-4">
+            <p className="text-sm text-fg">
+              Couldn't save that task — {taskError}
+            </p>
+            <button
+              onClick={clearTaskError}
+              className="text-xs text-faint hover:text-fg transition-colors shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Result of a "connect account" round-trip */}
         {notice && (
           <div className="card flex items-center justify-between gap-4">
@@ -190,8 +208,13 @@ export default function App() {
           />
         )}
 
-        {/* At-a-glance stats */}
-        <StatRow tasks={tasks} emails={emails} />
+        {/* At-a-glance stats for the day you're looking at */}
+        <StatRow
+          tasks={dayTasks}
+          events={dayEvents}
+          emails={emails}
+          isToday={isTodayView}
+        />
 
         {/* Time-blocked day, or the whole week for planning ahead */}
         {view === 'day' ? (
@@ -209,6 +232,7 @@ export default function App() {
             onChangeDate={setSelectedDate}
             defaultDate={selectedISO}
             onAddTask={addTask}
+            onToggleComplete={toggleComplete}
             view={view}
             onChangeView={setView}
           />
@@ -247,6 +271,7 @@ export default function App() {
             onAdd={addTask}
             onUpdate={updateTask}
             onDelete={deleteTask}
+            onDeleteSeries={deleteSeries}
             defaultDate={selectedISO}
           />
           <EmailSection emails={emails} onReply={markReplied} />

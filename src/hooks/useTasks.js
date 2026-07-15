@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import { fetchTasks, insertTask, updateTaskRow, deleteTaskRow, toISODate } from '../lib/tasks'
+import {
+  fetchTasks, insertTask, insertTasks, updateTaskRow, deleteTaskRow,
+  deleteSeriesFrom, toISODate,
+} from '../lib/tasks'
+import { occurrences } from '../lib/recurrence'
 
 const TASKS_KEY = 'sentinel.tasks.v1'
 
@@ -24,6 +28,8 @@ function readLocal() {
 export default function useTasks() {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
+  // Surfaced in the UI — a failed save must never just vanish silently.
+  const [error, setError] = useState(null)
   const tasksRef = useRef(tasks)
   const userIdRef = useRef(null)
   const initStarted = useRef(false) // guards against StrictMode double-run
@@ -85,13 +91,44 @@ export default function useTasks() {
       date: toISODate(new Date()),
       ...data,
     }
+
+    // A repeating task becomes one real row per occurrence, sharing a series id.
+    // Each occurrence then has its own checkbox, subtasks and edits.
+    const repeats = Boolean(base.recurrence) && Boolean(base.date)
+
     if (isSupabaseConfigured) {
       try {
-        const created = await insertTask(base, userIdRef.current)
-        setTasks(prev => [...prev, created])
-      } catch (e) { console.error('Add task failed:', e) }
+        setError(null)
+        if (repeats) {
+          const seriesId = crypto.randomUUID()
+          const rows = occurrences(base.date, base.recurrence).map(date => ({
+            ...base, date, seriesId,
+          }))
+          const created = await insertTasks(rows, userIdRef.current)
+          setTasks(prev => [...prev, ...created])
+        } else {
+          const created = await insertTask({ ...base, recurrence: null }, userIdRef.current)
+          setTasks(prev => [...prev, created])
+        }
+      } catch (e) {
+        console.error('Add task failed:', e)
+        setError(e.message || 'Could not save that task')
+      }
     } else {
-      setTasks(prev => [...prev, { id: Date.now(), ...base }])
+      const rows = repeats
+        ? occurrences(base.date, base.recurrence).map((date, i) => ({
+            ...base, date, id: Date.now() + i, seriesId: 'local',
+          }))
+        : [{ id: Date.now(), ...base }]
+      setTasks(prev => [...prev, ...rows])
+    }
+  }, [])
+
+  // Stop a repeating task: remove this occurrence and everything after it.
+  const deleteSeries = useCallback((seriesId, fromDate) => {
+    setTasks(prev => prev.filter(t => !(t.seriesId === seriesId && t.date >= fromDate)))
+    if (isSupabaseConfigured) {
+      deleteSeriesFrom(seriesId, fromDate).catch(e => console.error('Delete series failed:', e))
     }
   }, [])
 
@@ -129,5 +166,9 @@ export default function useTasks() {
     if (isSupabaseConfigured) updateTaskRow(taskId, { subtasks: nextSubs }).catch(e => console.error(e))
   }, [])
 
-  return { tasks, loading, addTask, updateTask, deleteTask, toggleReminder, toggleComplete, toggleSubtask }
+  return {
+    tasks, loading, error, clearError: () => setError(null),
+    addTask, updateTask, deleteTask, deleteSeries,
+    toggleReminder, toggleComplete, toggleSubtask,
+  }
 }
