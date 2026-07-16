@@ -135,6 +135,9 @@ export default function App() {
   const reviewAll = () => {
     document.getElementById('working-area')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+  const scrollToSection = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   // Dated tasks belong to their day. A general task (no date) just lives under
   // Today's tasks until it's done.
@@ -191,6 +194,8 @@ export default function App() {
           events={dayEvents}
           emails={emails}
           isToday={isTodayView}
+          onTasksClick={() => scrollToSection('tasks-section')}
+          onEmailsClick={() => scrollToSection('emails-section')}
         />
 
         {/* Search everything on record — tasks, annotated blocks, their subtasks */}
@@ -271,30 +276,35 @@ export default function App() {
           />
         )}
 
-        {/* Two-column working area */}
+        {/* Two-column working area. Each side is its own scroll anchor so the
+            stat tiles up top can jump straight to it. */}
         <div id="working-area" className="grid grid-cols-1 lg:grid-cols-2 gap-6 scroll-mt-20">
-          <TasksSection
-            tasks={visibleTasks}
-            onToggleReminder={toggleReminder}
-            onToggleComplete={toggleComplete}
-            onAdd={addTask}
-            onUpdate={updateTask}
-            onDelete={deleteTask}
-            onDeleteSeries={deleteSeries}
-            defaultDate={selectedISO}
-          />
-          <EmailSection
-            emails={emails}
-            loading={emailsLoading}
-            remaining={emailsRemaining}
-            error={emailError}
-            accountErrors={emailAccountErrors}
-            onAct={actOnEmail}
-            onDismiss={dismissEmail}
-            onReclassify={reclassifyEmail}
-            onFlag={toggleEmailFlag}
-            onClearError={clearEmailError}
-          />
+          <div id="tasks-section" className="scroll-mt-20">
+            <TasksSection
+              tasks={visibleTasks}
+              onToggleReminder={toggleReminder}
+              onToggleComplete={toggleComplete}
+              onAdd={addTask}
+              onUpdate={updateTask}
+              onDelete={deleteTask}
+              onDeleteSeries={deleteSeries}
+              defaultDate={selectedISO}
+            />
+          </div>
+          <div id="emails-section" className="scroll-mt-20">
+            <EmailSection
+              emails={emails}
+              loading={emailsLoading}
+              remaining={emailsRemaining}
+              error={emailError}
+              accountErrors={emailAccountErrors}
+              onAct={actOnEmail}
+              onDismiss={dismissEmail}
+              onReclassify={reclassifyEmail}
+              onFlag={toggleEmailFlag}
+              onClearError={clearEmailError}
+            />
+          </div>
         </div>
       </main>
 

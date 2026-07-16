@@ -51,7 +51,7 @@ function formatHours(mins) {
   return `${h % 1 === 0 ? h : h.toFixed(1)}h`
 }
 
-export default function StatRow({ tasks, events = [], emails, isToday = true }) {
+export default function StatRow({ tasks, events = [], emails, isToday = true, onTasksClick, onEmailsClick }) {
   const openTasks = tasks.filter(t => !t.completed).length
   // Claude's triage bucket, across every connected mailbox.
   const replyEmails = emails.filter(e => e.action === 'reply').length
@@ -60,28 +60,35 @@ export default function StatRow({ tasks, events = [], emails, isToday = true }) 
   const blocks = [...tasks.filter(t => t.time), ...events]
   const scheduled = scheduledMinutes(blocks)
 
+  // Tasks and Need-reply jump to their sections; Scheduled is a readout only.
   const stats = [
-    { value: openTasks, label: isToday ? 'Tasks today' : 'Tasks', icon: <IconCheck />, accent: false },
-    { value: replyEmails, label: 'Need reply', icon: <IconMail />, accent: true },
+    { value: openTasks, label: isToday ? 'Tasks today' : 'Tasks', icon: <IconCheck />, accent: false, onClick: onTasksClick },
+    { value: replyEmails, label: 'Need reply', icon: <IconMail />, accent: true, onClick: onEmailsClick },
     { value: formatHours(scheduled), label: isToday ? 'Scheduled today' : 'Scheduled', icon: <IconClock />, accent: false },
   ]
 
   return (
     <div className="grid grid-cols-3 gap-3 sm:gap-4">
-      {stats.map(stat => (
-        <div
-          key={stat.label}
-          className={`card p-3 sm:p-4 ${stat.accent ? 'bg-surface2 ring-1 ring-line2' : ''}`}
-        >
-          <div className="text-2xl sm:text-3xl font-medium leading-none text-fg tabular-nums">
-            {stat.value}
-          </div>
-          <div className="flex items-center gap-1.5 text-muted text-xs mt-2">
-            <span className={stat.accent ? 'text-fg' : 'text-faint'}>{stat.icon}</span>
-            {stat.label}
-          </div>
-        </div>
-      ))}
+      {stats.map(stat => {
+        const Tag = stat.onClick ? 'button' : 'div'
+        return (
+          <Tag
+            key={stat.label}
+            onClick={stat.onClick || undefined}
+            className={`card p-3 sm:p-4 text-left w-full ${stat.accent ? 'bg-surface2 ring-1 ring-line2' : ''} ${
+              stat.onClick ? 'card-hover cursor-pointer' : ''
+            }`}
+          >
+            <div className="text-2xl sm:text-3xl font-medium leading-none text-fg tabular-nums">
+              {stat.value}
+            </div>
+            <div className="flex items-center gap-1.5 text-muted text-xs mt-2">
+              <span className={stat.accent ? 'text-fg' : 'text-faint'}>{stat.icon}</span>
+              {stat.label}
+            </div>
+          </Tag>
+        )
+      })}
     </div>
   )
 }
