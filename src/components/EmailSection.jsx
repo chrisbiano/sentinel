@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import SectionHeader from './SectionHeader'
+import ComposeModal from './ComposeModal'
 
 function MailIcon() {
   return (
@@ -33,7 +34,7 @@ function timeAgo(iso) {
 const gmailLink = (email) =>
   `https://mail.google.com/mail/u/${encodeURIComponent(email.account_email)}/#inbox/${email.thread_id || email.message_id}`
 
-function EmailRow({ email, onAct, busy }) {
+function EmailRow({ email, onAct, onReply, busy }) {
   const [confirming, setConfirming] = useState(false)
 
   const trash = () => {
@@ -74,11 +75,17 @@ function EmailRow({ email, onAct, busy }) {
       </div>
 
       <div className="flex items-center gap-2 mt-3 pt-3 border-t border-line flex-wrap">
+        <button
+          onClick={() => onReply(email)}
+          className="text-xs px-2.5 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
+        >
+          Reply
+        </button>
         <a
           href={gmailLink(email)}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs px-2.5 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
+          className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors"
         >
           Open in Gmail
         </a>
@@ -121,10 +128,12 @@ export default function EmailSection({
   error,
   accountErrors = [],
   onAct,
+  onDismiss,
   onClearError,
 }) {
   const [tab, setTab] = useState('reply')
   const [busyKey, setBusyKey] = useState(null)
+  const [replyTo, setReplyTo] = useState(null)   // email being composed, or null
 
   const counts = Object.fromEntries(
     BUCKETS.map(b => [b.key, emails.filter(e => e.action === b.key).length])
@@ -217,11 +226,25 @@ export default function EmailSection({
               key={rowKey(email)}
               email={email}
               onAct={act}
+              onReply={setReplyTo}
               busy={busyKey === rowKey(email)}
             />
           ))
         )}
       </div>
+
+      {replyTo && (
+        <ComposeModal
+          email={replyTo}
+          onClose={() => setReplyTo(null)}
+          onSent={(sent) => {
+            // gmail-send already marked it handled server-side, so this is a
+            // pure local removal — no gmail-action round-trip.
+            onDismiss(sent.message_id, sent.account_email)
+            setReplyTo(null)
+          }}
+        />
+      )}
     </section>
   )
 }

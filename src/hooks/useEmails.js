@@ -90,6 +90,14 @@ export default function useEmails() {
     }
   }, [emails])
 
+  // Drop a message from the list with no server call — for actions already
+  // completed server-side (e.g. a sent reply, which gmail-send marks handled).
+  const dismiss = useCallback((messageId, accountEmail) => {
+    setEmails(prev => prev.filter(
+      e => !(e.message_id === messageId && e.account_email === accountEmail)
+    ))
+  }, [])
+
   return {
     emails,
     loading,
@@ -99,5 +107,6 @@ export default function useEmails() {
     clearError: () => setError(null),
     refresh,
     act,
+    dismiss,
   }
 }

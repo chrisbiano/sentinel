@@ -8,11 +8,14 @@ export const isConnectConfigured = Boolean(CLIENT_ID && SUPABASE_URL)
 /* Calendar stays read-only — Sentinel annotates blocks in its own store and
    never writes back to Google.
  *
- * Gmail needs `modify` rather than `readonly` because triage is useless if you
- * can't act on it: marking read, and moving to Trash, both live behind modify.
- * Notably `modify` cannot permanently delete — that needs Google's blanket
- * mail scope, which Sentinel deliberately does not ask for. Everything this
- * app trashes is recoverable in Gmail for 30 days.
+ * Gmail scopes, each earning its place:
+ *   modify        — triage is useless if you can't act on it: mark read, move
+ *                   to Trash. Notably cannot permanently delete (that needs
+ *                   Google's blanket mail scope, which we refuse); trashed mail
+ *                   is recoverable in Gmail for 30 days.
+ *   send          — reply to a message in-thread, as you.
+ *   settings.basic — read the account's real send-as signature so replies go
+ *                   out with it intact. Read-only use; we never change settings.
  *
  * Changing this list means every already-connected account must reconnect to
  * re-consent. `include_granted_scopes` keeps previously granted access intact. */
@@ -21,6 +24,8 @@ const SCOPES = [
   'email',
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.settings.basic',
 ].join(' ')
 
 /**
