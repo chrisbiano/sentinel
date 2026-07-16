@@ -113,87 +113,97 @@ function EmailRow({ email, onAct, onReply, onRead, onReclassify, onFlag, onAddTo
         </div>
       </div>
 
-      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-line flex-wrap">
-        <button
-          onClick={() => onRead(email)}
-          className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors"
-        >
-          Read
-        </button>
-        <button
-          onClick={() => onReply(email)}
-          className="text-xs px-2.5 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
-        >
-          Reply
-        </button>
-        {/* "Answer this later" — drops a don't-forget task into Today. */}
-        <button
-          onClick={addTask}
-          disabled={added}
-          title="Add a reminder to reply, under Today's tasks"
-          className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors disabled:opacity-70"
-        >
-          {added ? 'Added ✓' : '+ Task'}
-        </button>
-        <a
-          href={gmailLink(email)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors"
-        >
-          Open in Gmail
-        </a>
-        <button
-          onClick={() => onAct(email, 'read')}
-          className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors"
-        >
-          Mark read
-        </button>
-        {email.action === 'unsubscribe' && (
+      <div className="mt-3 pt-3 border-t border-line">
+        {/* Row 1 — the "handle it now" actions, kept together on one line. */}
+        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={unsubscribe}
+            onClick={() => onRead(email)}
             className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors"
           >
-            Unsubscribe
+            Read
           </button>
-        )}
-
-        {/* Move to a different bucket — the fix when Claude got it wrong. */}
-        <div className="relative ml-auto">
           <button
-            onClick={() => setMoveOpen(o => !o)}
-            onBlur={() => setTimeout(() => setMoveOpen(false), 150)}
-            className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-faint hover:text-fg hover:bg-surface2 transition-colors"
+            onClick={() => onReply(email)}
+            className="text-xs px-2.5 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
           >
-            Move ▾
+            Reply
           </button>
-          {moveOpen && (
-            <div className="absolute right-0 bottom-full mb-1 z-10 w-36 bg-surface border border-line2 rounded-lg shadow-xl py-1">
-              <p className="text-xs text-faint px-3 py-1">Move to</p>
-              {moveTargets.map(b => (
-                <button
-                  key={b.key}
-                  onMouseDown={() => { onReclassify(email, b.key); setMoveOpen(false) }}
-                  className="block w-full text-left text-xs px-3 py-1.5 text-muted hover:text-fg hover:bg-surface2 transition-colors"
-                >
-                  {b.label}
-                </button>
-              ))}
-            </div>
-          )}
+          <a
+            href={gmailLink(email)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors"
+          >
+            Open in Gmail
+          </a>
+          <button
+            onClick={() => onAct(email, 'read')}
+            className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors"
+          >
+            Mark read
+          </button>
         </div>
 
-        <button
-          onClick={trash}
-          onBlur={() => setConfirming(false)}
-          className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
-            confirming
-              ? 'border-line2 bg-surface2 text-fg'
-              : 'border-line2 text-faint hover:text-fg hover:bg-surface2'
-          }`}
-        >
-          {confirming ? 'Sure? Trash it' : 'Trash'}
-        </button>
+        {/* Row 2 — deal-with-it-later on the left; organize/remove on the right. */}
+        <div className="flex items-center gap-2 flex-wrap mt-2">
+          {/* "Answer this later" — drops a don't-forget task into Today. */}
+          <button
+            onClick={addTask}
+            disabled={added}
+            title="Add a reminder to reply, under Today's tasks"
+            className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors disabled:opacity-70"
+          >
+            {added ? 'Added ✓' : '+ Task'}
+          </button>
+
+          <div className="flex items-center gap-2 ml-auto">
+            {email.action === 'unsubscribe' && (
+              <button
+                onClick={unsubscribe}
+                className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors"
+              >
+                Unsubscribe
+              </button>
+            )}
+
+            {/* Move to a different bucket — the fix when Claude got it wrong. */}
+            <div className="relative">
+              <button
+                onClick={() => setMoveOpen(o => !o)}
+                onBlur={() => setTimeout(() => setMoveOpen(false), 150)}
+                className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-faint hover:text-fg hover:bg-surface2 transition-colors"
+              >
+                Move ▾
+              </button>
+              {moveOpen && (
+                <div className="absolute right-0 bottom-full mb-1 z-10 w-36 bg-surface border border-line2 rounded-lg shadow-xl py-1">
+                  <p className="text-xs text-faint px-3 py-1">Move to</p>
+                  {moveTargets.map(b => (
+                    <button
+                      key={b.key}
+                      onMouseDown={() => { onReclassify(email, b.key); setMoveOpen(false) }}
+                      className="block w-full text-left text-xs px-3 py-1.5 text-muted hover:text-fg hover:bg-surface2 transition-colors"
+                    >
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={trash}
+              onBlur={() => setConfirming(false)}
+              className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                confirming
+                  ? 'border-line2 bg-surface2 text-fg'
+                  : 'border-line2 text-faint hover:text-fg hover:bg-surface2'
+              }`}
+            >
+              {confirming ? 'Sure? Trash it' : 'Trash'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
