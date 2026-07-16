@@ -131,6 +131,23 @@ export default function Timeline({
     return 0
   })
 
+  // Which items sit *inside* a longer block? A shorter item fully enclosed by a
+  // longer one (a noon task during a 9:30–2 work block) gets indented under it
+  // with a "during …" tag, so it reads as happening within the block rather
+  // than after it. One level of nesting; the outermost/longest block wins.
+  const spans = items.map(it => {
+    const s = toMinutes(it.time)
+    return { ...it, _s: s, _e: s + (it.duration || 0) }
+  })
+  const decorated = spans.map((it, i) => {
+    let container = null
+    spans.forEach((o, j) => {
+      const encloses = o._s <= it._s && o._e >= it._e && o.duration > it.duration
+      if (j !== i && encloses && (!container || o.duration > container.duration)) container = o
+    })
+    return { ...it, insideTitle: container ? container.title : null }
+  })
+
   return (
     <section>
       <SectionHeader
@@ -197,10 +214,20 @@ export default function Timeline({
         ) : (
           <>
         <ol className="relative border-l border-line ml-[4.75rem] py-2">
-          {items.map(item => (
-            <li key={item.id} className="relative pl-6 pr-4 py-2.5">
-              {/* time label, left of the rail */}
-              <span className="absolute -left-[4.75rem] top-3 w-16 text-right text-xs text-muted tabular-nums">
+          {decorated.map(item => (
+            <li
+              key={item.id}
+              className={`relative pr-4 py-2.5 ${
+                item.insideTitle ? 'pl-6 ml-[18px] border-l border-line' : 'pl-6'
+              }`}
+            >
+              {/* time label, left of the rail — pushed out further for an
+                  indented (inside-a-block) row so it stays in the same gutter */}
+              <span
+                className={`absolute top-3 w-16 text-right text-xs text-muted tabular-nums ${
+                  item.insideTitle ? '-left-[calc(4.75rem+18px)]' : '-left-[4.75rem]'
+                }`}
+              >
                 {item.time}
               </span>
               {/* node on the rail */}
@@ -211,7 +238,7 @@ export default function Timeline({
               />
               {/* block */}
               <div className={item.done ? 'opacity-50' : ''}>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {/* Check anything off right here. For events this is Sentinel's
                       own "wrapped up" flag — Google's copy is never touched. */}
                   <input
@@ -228,6 +255,12 @@ export default function Timeline({
                   <h3 className={`font-medium text-sm ${item.done ? 'line-through text-faint' : 'text-fg'}`}>
                     {item.title}
                   </h3>
+                  {/* Happens inside a longer block — the "during" cue. */}
+                  {item.insideTitle && (
+                    <span className="text-[10px] text-muted border border-line2 rounded px-1.5 py-0.5 whitespace-nowrap">
+                      during {item.insideTitle.length > 22 ? `${item.insideTitle.slice(0, 22)}…` : item.insideTitle}
+                    </span>
+                  )}
                   {item.kind === 'task' && item.hasReminder && (
                     <span className="text-faint" title="Reminder on"><BellDot /></span>
                   )}
