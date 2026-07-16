@@ -85,6 +85,8 @@ export default function App() {
     clearError: clearEmailError,
     act: actOnEmail,
     dismiss: dismissEmail,
+    reclassify: reclassifyEmail,
+    toggleFlag: toggleEmailFlag,
   } = useEmails()
 
   // Real events from every connected Google Calendar, merged onto the timeline.
@@ -285,6 +287,8 @@ export default function App() {
             accountErrors={emailAccountErrors}
             onAct={actOnEmail}
             onDismiss={dismissEmail}
+            onReclassify={reclassifyEmail}
+            onFlag={toggleEmailFlag}
             onClearError={clearEmailError}
           />
         </div>

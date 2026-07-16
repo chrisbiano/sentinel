@@ -78,8 +78,8 @@ Deno.serve(async (req) => {
   // accountEmail is required, not optional: Gmail message ids are unique per
   // mailbox, so an id alone doesn't identify a message across six accounts.
   const { messageId, accountEmail, action } = body
-  if (!messageId || !accountEmail || !['read', 'trash', 'unsubscribe'].includes(action)) {
-    return json({ error: 'Expected { messageId, accountEmail, action: read|trash|unsubscribe }' }, 400)
+  if (!messageId || !accountEmail || !['read', 'trash', 'unsubscribe', 'star', 'unstar'].includes(action)) {
+    return json({ error: 'Expected { messageId, accountEmail, action: read|trash|unsubscribe|star|unstar }' }, 400)
   }
 
   // Read the row through the *user's* id, so one person can never act on
@@ -105,6 +105,28 @@ Deno.serve(async (req) => {
   if (!token) return json({ error: `Couldn't refresh access for ${acct.email}` }, 502)
   const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
   const base = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`
+
+  // Flag = Gmail's star. Toggle the STARRED label and mirror it in our row.
+  // Unlike the other actions, this is NOT terminal: a starred email stays in
+  // the list, so we never set handled_at here.
+  if (action === 'star' || action === 'unstar') {
+    const starred = action === 'star'
+    const r = await fetch(`${base}/modify`, {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify(starred ? { addLabelIds: ['STARRED'] } : { removeLabelIds: ['STARRED'] }),
+    })
+    if (!r.ok) return json({ error: `Gmail refused the star request (HTTP ${r.status})` }, 502)
+
+    await admin
+      .from('email_verdicts')
+      .update({ flagged: starred })
+      .eq('user_id', u.user.id)
+      .eq('account_email', accountEmail)
+      .eq('message_id', messageId)
+
+    return json({ ok: true, action, flagged: starred })
+  }
 
   let note: string | null = null
 

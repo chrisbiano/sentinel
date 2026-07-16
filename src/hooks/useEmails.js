@@ -98,6 +98,50 @@ export default function useEmails() {
     ))
   }, [])
 
+  const same = (e, email) =>
+    e.message_id === email.message_id && e.account_email === email.account_email
+
+  /* Move an email to a different bucket by hand — Claude got it wrong. Records
+     it as Chris's call so nothing re-sorts it later. Pure DB update (RLS scopes
+     to his own rows); no Gmail side. */
+  const reclassify = useCallback(async (email, action) => {
+    const previous = emails
+    setEmails(list => list.map(e =>
+      same(e, email) ? { ...e, action, reason: 'You moved this here', manual_override: true } : e
+    ))
+    setError(null)
+    const { error: dbError } = await supabase
+      .from('email_verdicts')
+      .update({ action, reason: 'You moved this here', manual_override: true })
+      .eq('message_id', email.message_id)
+      .eq('account_email', email.account_email)
+    if (dbError) {
+      setEmails(previous)
+      setError(`Couldn't move that email: ${dbError.message}`)
+    }
+  }, [emails])
+
+  /* Flag = star it in Gmail. Goes through gmail-action so the star lands on the
+     real message (and mirrors into our row); flagged mail sorts to the top of
+     its bucket. Optimistic, reverted if Gmail refuses. */
+  const toggleFlag = useCallback(async (email) => {
+    const next = !email.flagged
+    const previous = emails
+    setEmails(list => list.map(e => (same(e, email) ? { ...e, flagged: next } : e)))
+    setError(null)
+    const { data, error: fnError } = await supabase.functions.invoke('gmail-action', {
+      body: {
+        messageId: email.message_id,
+        accountEmail: email.account_email,
+        action: next ? 'star' : 'unstar',
+      },
+    })
+    if (fnError || data?.error) {
+      setEmails(previous)
+      setError((data && data.error) || fnError?.message || "Couldn't flag that email")
+    }
+  }, [emails])
+
   return {
     emails,
     loading,
@@ -108,5 +152,7 @@ export default function useEmails() {
     refresh,
     act,
     dismiss,
+    reclassify,
+    toggleFlag,
   }
 }

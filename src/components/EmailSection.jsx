@@ -35,8 +35,19 @@ function timeAgo(iso) {
 const gmailLink = (email) =>
   `https://mail.google.com/mail/u/${encodeURIComponent(email.account_email)}/#inbox/${email.thread_id || email.message_id}`
 
-function EmailRow({ email, onAct, onReply, onRead, busy }) {
+function StarIcon({ filled }) {
+  return (
+    <svg viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+    </svg>
+  )
+}
+
+function EmailRow({ email, onAct, onReply, onRead, onReclassify, onFlag, busy }) {
   const [confirming, setConfirming] = useState(false)
+  const [moveOpen, setMoveOpen] = useState(false)
+  const moveTargets = BUCKETS.filter(b => b.key !== email.action)
 
   const trash = () => {
     if (!confirming) { setConfirming(true); return }
@@ -61,6 +72,21 @@ function EmailRow({ email, onAct, onReply, onRead, busy }) {
             <h3 className="font-medium text-sm text-fg truncate">{email.sender || email.sender_email}</h3>
             <span className="text-xs text-faint shrink-0">{timeAgo(email.received_at)}</span>
           </div>
+        </div>
+        {/* Flag — floats this to the top of its bucket so it isn't buried. */}
+        <button
+          onClick={() => onFlag(email)}
+          aria-label={email.flagged ? 'Remove flag' : 'Flag'}
+          title={email.flagged ? 'Flagged' : 'Flag as important'}
+          className={`shrink-0 transition-colors ${
+            email.flagged ? 'text-fg' : 'text-faint hover:text-fg'
+          }`}
+        >
+          <StarIcon filled={email.flagged} />
+        </button>
+      </div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <button
             onClick={() => onRead(email)}
             className="text-sm text-muted hover:text-fg truncate mt-0.5 block text-left w-full transition-colors"
@@ -115,10 +141,36 @@ function EmailRow({ email, onAct, onReply, onRead, busy }) {
             Unsubscribe
           </button>
         )}
+
+        {/* Move to a different bucket — the fix when Claude got it wrong. */}
+        <div className="relative ml-auto">
+          <button
+            onClick={() => setMoveOpen(o => !o)}
+            onBlur={() => setTimeout(() => setMoveOpen(false), 150)}
+            className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-faint hover:text-fg hover:bg-surface2 transition-colors"
+          >
+            Move ▾
+          </button>
+          {moveOpen && (
+            <div className="absolute right-0 bottom-full mb-1 z-10 w-36 bg-surface border border-line2 rounded-lg shadow-xl py-1">
+              <p className="text-xs text-faint px-3 py-1">Move to</p>
+              {moveTargets.map(b => (
+                <button
+                  key={b.key}
+                  onMouseDown={() => { onReclassify(email, b.key); setMoveOpen(false) }}
+                  className="block w-full text-left text-xs px-3 py-1.5 text-muted hover:text-fg hover:bg-surface2 transition-colors"
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <button
           onClick={trash}
           onBlur={() => setConfirming(false)}
-          className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ml-auto ${
+          className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
             confirming
               ? 'border-line2 bg-surface2 text-fg'
               : 'border-line2 text-faint hover:text-fg hover:bg-surface2'
@@ -141,6 +193,8 @@ export default function EmailSection({
   accountErrors = [],
   onAct,
   onDismiss,
+  onReclassify,
+  onFlag,
   onClearError,
 }) {
   const [tab, setTab] = useState('reply')
@@ -151,7 +205,11 @@ export default function EmailSection({
   const counts = Object.fromEntries(
     BUCKETS.map(b => [b.key, emails.filter(e => e.action === b.key).length])
   )
-  const shown = emails.filter(e => e.action === tab)
+  // Flagged first, newest-first within each group. The source list is already
+  // received-desc and JS sort is stable, so this only lifts flagged to the top.
+  const shown = emails
+    .filter(e => e.action === tab)
+    .sort((a, b) => (b.flagged ? 1 : 0) - (a.flagged ? 1 : 0))
   const active = BUCKETS.find(b => b.key === tab)
 
   // Gmail ids only identify a message within one mailbox, so every key here is
@@ -241,6 +299,8 @@ export default function EmailSection({
               onAct={act}
               onReply={setReplyTo}
               onRead={setReading}
+              onReclassify={onReclassify}
+              onFlag={onFlag}
               busy={busyKey === rowKey(email)}
             />
           ))
