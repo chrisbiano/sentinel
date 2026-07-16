@@ -44,10 +44,17 @@ function StarIcon({ filled }) {
   )
 }
 
-function EmailRow({ email, onAct, onReply, onRead, onReclassify, onFlag, busy }) {
+function EmailRow({ email, onAct, onReply, onRead, onReclassify, onFlag, onAddToTasks, busy }) {
   const [confirming, setConfirming] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
+  const [added, setAdded] = useState(false)
   const moveTargets = BUCKETS.filter(b => b.key !== email.action)
+
+  const addTask = () => {
+    onAddToTasks(email)
+    setAdded(true)
+    setTimeout(() => setAdded(false), 2000)
+  }
 
   const trash = () => {
     if (!confirming) { setConfirming(true); return }
@@ -118,6 +125,15 @@ function EmailRow({ email, onAct, onReply, onRead, onReclassify, onFlag, busy })
           className="text-xs px-2.5 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
         >
           Reply
+        </button>
+        {/* "Answer this later" — drops a don't-forget task into Today. */}
+        <button
+          onClick={addTask}
+          disabled={added}
+          title="Add a reminder to reply, under Today's tasks"
+          className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors disabled:opacity-70"
+        >
+          {added ? 'Added ✓' : '+ Task'}
         </button>
         <a
           href={gmailLink(email)}
@@ -195,6 +211,7 @@ export default function EmailSection({
   onDismiss,
   onReclassify,
   onFlag,
+  onAddToTasks,
   onClearError,
 }) {
   const [tab, setTab] = useState('reply')
@@ -301,6 +318,7 @@ export default function EmailSection({
               onRead={setReading}
               onReclassify={onReclassify}
               onFlag={onFlag}
+              onAddToTasks={onAddToTasks}
               busy={busyKey === rowKey(email)}
             />
           ))

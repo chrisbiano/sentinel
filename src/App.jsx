@@ -139,6 +139,14 @@ export default function App() {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  // "This needs an answer, but not right now." Drops a dateless task that rides
+  // Today forward until it's checked off — the don't-forget-to-reply net.
+  const addEmailToTasks = (email) => {
+    const who = email.sender || email.sender_email || 'someone'
+    const subject = email.subject || '(no subject)'
+    addTask({ title: `Reply: ${who} — ${subject}`, date: null })
+  }
+
   // Dated tasks belong to their day. A general task (no date) just lives under
   // Today's tasks until it's done.
   const isTodayView = selectedISO === toISODate(new Date())
@@ -302,6 +310,7 @@ export default function App() {
               onDismiss={dismissEmail}
               onReclassify={reclassifyEmail}
               onFlag={toggleEmailFlag}
+              onAddToTasks={addEmailToTasks}
               onClearError={clearEmailError}
             />
           </div>
