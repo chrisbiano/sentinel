@@ -100,9 +100,9 @@ function NotificationsSection() {
             <button
               onClick={test}
               disabled={busy}
-              className="mt-2 text-xs text-faint hover:text-fg transition-colors disabled:opacity-50"
+              className="mt-3 w-full px-3 py-2 text-sm rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors disabled:opacity-50"
             >
-              Send a test notification
+              {busy ? 'Sending…' : 'Send a test notification'}
             </button>
           )}
         </>
