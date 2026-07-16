@@ -14,3 +14,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </ErrorBoundary>
   </React.StrictMode>,
 )
+
+// Register the service worker so the app is installable and can receive push.
+// Kept out of the render path — a failure here should never blank the app.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((e) => {
+      console.error('Service worker registration failed:', e)
+    })
+  })
+}
