@@ -2,6 +2,117 @@ import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { startGoogleConnect, isConnectConfigured } from '../lib/connect'
 import useConnectedAccounts from '../hooks/useConnectedAccounts'
+import {
+  isPushConfigured, pushStatus, currentSubscription,
+  enablePush, disablePush, sendTestPush,
+} from '../lib/push'
+
+/* Turn Web Push on for this device, and prove it works with a test ping before
+   any reminder depends on it. The iOS reality is baked in: on iPhone, push only
+   works once Sentinel is installed to the home screen, so a Safari tab is
+   guided to install rather than shown a button that can't work. */
+function NotificationsSection() {
+  const [status] = useState(pushStatus)      // ready | ios-needs-install | unsupported | unconfigured
+  const [enabled, setEnabled] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    currentSubscription().then(sub => setEnabled(Boolean(sub))).catch(() => {})
+  }, [])
+
+  if (!isPushConfigured) return null
+
+  const enable = async () => {
+    setBusy(true); setError(null); setNote(null)
+    try {
+      await enablePush()
+      setEnabled(true)
+      setNote('Notifications are on for this device.')
+    } catch (e) {
+      setError(e.message || 'Could not enable notifications')
+    } finally { setBusy(false) }
+  }
+
+  const disable = async () => {
+    setBusy(true); setError(null); setNote(null)
+    try {
+      await disablePush()
+      setEnabled(false)
+      setNote('Notifications are off for this device.')
+    } catch (e) {
+      setError(e.message || 'Could not turn notifications off')
+    } finally { setBusy(false) }
+  }
+
+  const test = async () => {
+    setBusy(true); setError(null); setNote(null)
+    try {
+      const r = await sendTestPush()
+      setNote(`Test sent to ${r.sent} device${r.sent === 1 ? '' : 's'} — check your phone.`)
+    } catch (e) {
+      setError(e.message || 'Could not send a test')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div>
+      <h3 className="text-xs font-medium text-faint uppercase tracking-wider mb-3">Notifications</h3>
+
+      {status === 'ios-needs-install' ? (
+        <p className="text-xs text-muted">
+          To get reminders on your iPhone, first add Sentinel to your Home Screen:
+          tap the <span className="text-fg">Share</span> button in Safari, then
+          <span className="text-fg"> Add to Home Screen</span>. Open Sentinel from
+          that icon and this option will turn on.
+        </p>
+      ) : status === 'unsupported' ? (
+        <p className="text-xs text-muted">
+          This browser doesn’t support notifications. Try Sentinel on your phone
+          (installed to the Home Screen) or a recent desktop browser.
+        </p>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm text-fg">Reminders on this device</p>
+              <p className="text-xs text-faint mt-0.5">
+                {enabled
+                  ? 'This device will receive reminder alerts.'
+                  : 'Turn on to let Sentinel alert you here.'}
+              </p>
+            </div>
+            <button
+              onClick={enabled ? disable : enable}
+              disabled={busy}
+              className={`px-3 py-1.5 text-sm rounded-lg font-medium shrink-0 transition-opacity disabled:opacity-50 ${
+                enabled
+                  ? 'border border-line2 text-muted hover:text-fg hover:bg-surface2'
+                  : 'bg-accent text-accent-fg hover:opacity-90'
+              }`}
+            >
+              {busy ? '…' : enabled ? 'Turn off' : 'Turn on'}
+            </button>
+          </div>
+
+          {enabled && (
+            <button
+              onClick={test}
+              disabled={busy}
+              className="mt-2 text-xs text-faint hover:text-fg transition-colors disabled:opacity-50"
+            >
+              Send a test notification
+            </button>
+          )}
+        </>
+      )}
+
+      {note && <p className="text-xs text-fg mt-2">{note}</p>}
+      {error && <p className="text-xs text-muted mt-2">{error}</p>}
+    </div>
+  )
+}
 
 /* Fetch and show the account's real Gmail signature — the exact HTML that
    signs a reply. Lets Chris confirm it looks right before trusting it on a
@@ -288,6 +399,9 @@ export default function SettingsModal({ open, onClose, settings, onChange }) {
               </div>
             </div>
           )}
+
+          {/* Notifications — Web Push for reminders */}
+          {isSupabaseConfigured && <NotificationsSection />}
 
           {/* Connected mailboxes */}
           {isConnectConfigured && (

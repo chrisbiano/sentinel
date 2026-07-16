@@ -31,3 +31,5 @@ Thumbs.db
 
 # Local tooling (machine-specific paths)
 .claude
+
+.vapid.local.txt
