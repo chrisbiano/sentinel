@@ -22,12 +22,21 @@ function BellDot() {
   )
 }
 
+// Minutes past midnight for a time label. Handles "2:00 PM", "2:00 p.m.", and
+// bare 24-hour "14:00". Anything unparseable sorts to the END of the day, never
+// the top — a broken time should sink, not leap above a real noon task.
 function toMinutes(t) {
-  const m = t.match(/(\d+):(\d+)\s*(AM|PM)/i)
-  if (!m) return 0
-  let h = Number(m[1]) % 12
-  if (/pm/i.test(m[3])) h += 12
-  return h * 60 + Number(m[2])
+  if (!t) return Number.MAX_SAFE_INTEGER
+  const m = String(t).match(/(\d+):(\d+)\s*(a\.?m\.?|p\.?m\.?)?/i)
+  if (!m) return Number.MAX_SAFE_INTEGER
+  let h = Number(m[1])
+  const min = Number(m[2])
+  const ap = m[3]?.toLowerCase()
+  if (ap) {                      // 12-hour with AM/PM
+    h = h % 12
+    if (ap.startsWith('p')) h += 12
+  }
+  return h * 60 + min
 }
 
 function endLabel(startMin, duration) {
@@ -109,7 +118,18 @@ export default function Timeline({
       subtasks: eventNotes[e.id]?.subtasks || [],
       done: eventNotes[e.id]?.done || false,
     })),
-  ].sort((a, b) => toMinutes(a.time) - toMinutes(b.time))
+  ].sort((a, b) => {
+    // Primary order: by start time — earliest on top, standard for a timeline.
+    const byStart = toMinutes(a.time) - toMinutes(b.time)
+    if (byStart !== 0) return byStart
+    // Same start: show the shorter one first, so a quick task at noon isn't
+    // buried under a long block that also happens to start at noon.
+    const byLength = (a.duration || 0) - (b.duration || 0)
+    if (byLength !== 0) return byLength
+    // Exact tie: a task before the calendar event it shares a slot with.
+    if (a.kind !== b.kind) return a.kind === 'task' ? -1 : 1
+    return 0
+  })
 
   return (
     <section>
