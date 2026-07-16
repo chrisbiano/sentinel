@@ -67,6 +67,10 @@ export default function App() {
         ? { kind: 'ok', text: `Connected ${connected}` }
         : { kind: 'err', text: `Couldn't connect that account (${err})` }
     )
+    // Reopen Settings on return — a fresh account needs its purpose note and
+    // signature check, and both live here. Landing on the bare dashboard would
+    // hide that the note even exists.
+    setSettingsOpen(true)
     window.history.replaceState({}, '', window.location.pathname)
   }, [])
 

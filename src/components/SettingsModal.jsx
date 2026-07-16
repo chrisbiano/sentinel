@@ -3,6 +3,60 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { startGoogleConnect, isConnectConfigured } from '../lib/connect'
 import useConnectedAccounts from '../hooks/useConnectedAccounts'
 
+/* Fetch and show the account's real Gmail signature — the exact HTML that
+   signs a reply. Lets Chris confirm it looks right before trusting it on a
+   client send. Needs the gmail.settings.basic scope, so before the reconnect
+   that grants it, this reports that plainly rather than showing blank. */
+function SignaturePreview({ accountEmail }) {
+  const [open, setOpen] = useState(false)
+  const [state, setState] = useState({ loading: false, html: null, error: null, empty: false })
+
+  const toggle = async () => {
+    if (open) { setOpen(false); return }
+    setOpen(true)
+    if (state.html !== null || state.empty || state.error) return   // already fetched
+    setState({ loading: true, html: null, error: null, empty: false })
+    const { data, error } = await supabase.functions.invoke('gmail-send', {
+      body: { accountEmail, mode: 'signature' },
+    })
+    if (error || data?.error) {
+      setState({ loading: false, html: null, empty: false,
+        error: (data && data.error) || 'Reconnect this account to read its signature.' })
+    } else if (!data.signatureHtml) {
+      setState({ loading: false, html: null, error: null, empty: true })
+    } else {
+      setState({ loading: false, html: data.signatureHtml, error: null, empty: false })
+    }
+  }
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={toggle}
+        className="text-xs text-faint hover:text-fg transition-colors"
+      >
+        {open ? 'Hide signature' : 'Preview signature'}
+      </button>
+      {open && (
+        <div className="mt-2 rounded-lg border border-line bg-bg p-3">
+          {state.loading ? (
+            <p className="text-xs text-faint">Reading your signature…</p>
+          ) : state.error ? (
+            <p className="text-xs text-muted">{state.error}</p>
+          ) : state.empty ? (
+            <p className="text-xs text-muted">No signature set on this account in Gmail.</p>
+          ) : (
+            <div
+              className="text-sm text-muted [&_a]:text-fg [&_img]:max-w-full [&_img]:h-auto"
+              dangerouslySetInnerHTML={{ __html: state.html }}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PlusIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -140,6 +194,8 @@ function AccountRow({ account, onSetPurpose, onDisconnect }) {
           </button>
         </div>
       )}
+
+      <SignaturePreview accountEmail={account.email} />
     </div>
   )
 }

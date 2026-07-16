@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import SectionHeader from './SectionHeader'
 import ComposeModal from './ComposeModal'
+import ReadModal from './ReadModal'
 
 function MailIcon() {
   return (
@@ -34,7 +35,7 @@ function timeAgo(iso) {
 const gmailLink = (email) =>
   `https://mail.google.com/mail/u/${encodeURIComponent(email.account_email)}/#inbox/${email.thread_id || email.message_id}`
 
-function EmailRow({ email, onAct, onReply, busy }) {
+function EmailRow({ email, onAct, onReply, onRead, busy }) {
   const [confirming, setConfirming] = useState(false)
 
   const trash = () => {
@@ -60,7 +61,12 @@ function EmailRow({ email, onAct, onReply, busy }) {
             <h3 className="font-medium text-sm text-fg truncate">{email.sender || email.sender_email}</h3>
             <span className="text-xs text-faint shrink-0">{timeAgo(email.received_at)}</span>
           </div>
-          <p className="text-sm text-muted truncate mt-0.5">{email.subject || '(no subject)'}</p>
+          <button
+            onClick={() => onRead(email)}
+            className="text-sm text-muted hover:text-fg truncate mt-0.5 block text-left w-full transition-colors"
+          >
+            {email.subject || '(no subject)'}
+          </button>
 
           {/* Claude's reasoning, in its own words. This is the part you audit. */}
           {email.reason && (
@@ -75,6 +81,12 @@ function EmailRow({ email, onAct, onReply, busy }) {
       </div>
 
       <div className="flex items-center gap-2 mt-3 pt-3 border-t border-line flex-wrap">
+        <button
+          onClick={() => onRead(email)}
+          className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors"
+        >
+          Read
+        </button>
         <button
           onClick={() => onReply(email)}
           className="text-xs px-2.5 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
@@ -134,6 +146,7 @@ export default function EmailSection({
   const [tab, setTab] = useState('reply')
   const [busyKey, setBusyKey] = useState(null)
   const [replyTo, setReplyTo] = useState(null)   // email being composed, or null
+  const [reading, setReading] = useState(null)   // email being read, or null
 
   const counts = Object.fromEntries(
     BUCKETS.map(b => [b.key, emails.filter(e => e.action === b.key).length])
@@ -227,11 +240,20 @@ export default function EmailSection({
               email={email}
               onAct={act}
               onReply={setReplyTo}
+              onRead={setReading}
               busy={busyKey === rowKey(email)}
             />
           ))
         )}
       </div>
+
+      {reading && (
+        <ReadModal
+          email={reading}
+          onClose={() => setReading(null)}
+          onReply={setReplyTo}
+        />
+      )}
 
       {replyTo && (
         <ComposeModal

@@ -159,20 +159,15 @@ Deno.serve(async (req) => {
   let body: any = {}
   try { body = await req.json() } catch { /* none */ }
   const { messageId, accountEmail, mode } = body
-  if (!messageId || !accountEmail || !['preview', 'send'].includes(mode)) {
-    return json({ error: 'Expected { messageId, accountEmail, mode: preview|send }' }, 400)
+  if (!accountEmail || !['preview', 'send', 'signature'].includes(mode)) {
+    return json({ error: 'Expected { accountEmail, mode: preview|send|signature }' }, 400)
+  }
+  // preview/send answer a specific message; signature just needs the account.
+  if ((mode === 'preview' || mode === 'send') && !messageId) {
+    return json({ error: 'messageId is required for preview/send' }, 400)
   }
 
-  // Scope the lookup through the user's id — an id alone never grants access.
-  const { data: row } = await admin
-    .from('email_verdicts')
-    .select('message_id, account_email')
-    .eq('user_id', u.user.id)
-    .eq('account_email', accountEmail)
-    .eq('message_id', messageId)
-    .single()
-  if (!row) return json({ error: 'No such message' }, 404)
-
+  // The account is the ownership check for every mode (scoped to this user).
   const { data: acct } = await admin
     .from('connected_accounts')
     .select('id, email')
@@ -183,6 +178,26 @@ Deno.serve(async (req) => {
 
   const token = await freshAccessToken(admin, acct)
   if (!token) return json({ error: `Couldn't refresh access for ${accountEmail}` }, 502)
+
+  // Signature preview: no message involved — just show what would sign a reply.
+  // Lets Chris eyeball his signature from Settings without composing anything.
+  if (mode === 'signature') {
+    const identity = await sendAsIdentity(token, accountEmail)
+    return json({
+      from: identity.displayName ? `${identity.displayName} <${accountEmail}>` : accountEmail,
+      signatureHtml: identity.signature,
+    })
+  }
+
+  // preview/send: confirm the message is one of his, scoped through his user id.
+  const { data: row } = await admin
+    .from('email_verdicts')
+    .select('message_id, account_email')
+    .eq('user_id', u.user.id)
+    .eq('account_email', accountEmail)
+    .eq('message_id', messageId)
+    .single()
+  if (!row) return json({ error: 'No such message' }, 404)
 
   const ctx = await originalContext(token, messageId)
   if (!ctx) return json({ error: 'Could not read the original message' }, 502)
