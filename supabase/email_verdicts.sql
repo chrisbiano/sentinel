@@ -44,7 +44,10 @@ create table if not exists public.email_verdicts (
   handled_at    timestamptz,
   classified_at timestamptz default now(),
 
-  unique (user_id, message_id)
+  -- Scoped to the mailbox, not just the user: Gmail message ids are unique
+  -- *per mailbox*, not globally. With six accounts, keying on message_id alone
+  -- would let two mailboxes collide and silently overwrite each other's mail.
+  unique (user_id, account_email, message_id)
 );
 
 alter table public.email_verdicts enable row level security;

@@ -9,7 +9,10 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
  * first run against six mailboxes drains in a few passes while the list fills
  * in underneath you, rather than spinning on a blank screen. */
 
-const MAX_PASSES = 12   // a stuck backlog should stop, not bill forever
+// Has to cover a full listing (LIST_PER_ACCOUNT x accounts) at MAX_PER_RUN per
+// pass, or a big first backlog stops halfway with no sign it gave up. Still
+// bounded — a loop that can't finish should stop, not bill forever.
+const MAX_PASSES = 32
 
 export default function useEmails() {
   const [emails, setEmails] = useState([])
@@ -57,14 +60,19 @@ export default function useEmails() {
 
   /* Act on one message. Optimistic: the row leaves the list immediately, and
      comes back if Gmail refused — a mail you think you trashed but didn't is
-     worse than a slow button. */
-  const act = useCallback(async (messageId, action) => {
+     worse than a slow button.
+   *
+   * Identified by mailbox + id, never id alone: Gmail ids are unique within a
+   * mailbox, not across them. */
+  const act = useCallback(async (messageId, accountEmail, action) => {
     const previous = emails
-    setEmails(prev => prev.filter(e => e.message_id !== messageId))
+    setEmails(prev => prev.filter(
+      e => !(e.message_id === messageId && e.account_email === accountEmail)
+    ))
     setError(null)
     try {
       const { data, error: fnError } = await supabase.functions.invoke('gmail-action', {
-        body: { messageId, action },
+        body: { messageId, accountEmail, action },
       })
       if (fnError) throw fnError
       if (data?.error) {

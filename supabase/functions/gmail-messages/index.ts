@@ -289,14 +289,22 @@ Deno.serve(async (req) => {
   }
 
   // 2. Which of those has Claude already judged?
+  //
+  // Filtered by date rather than .in(ids): six mailboxes x LIST_PER_ACCOUNT is
+  // hundreds of ids, and PostgREST takes them as a query string — that URL runs
+  // to ~10KB and gets rejected. It would have worked fine on one account and
+  // broken on the sixth. The window matches the Gmail query above, so the row
+  // count stays small either way.
   const { data: known } = await admin
     .from('email_verdicts')
-    .select('message_id')
+    .select('message_id, account_email')
     .eq('user_id', userId)
-    .in('message_id', seen.map((s) => s.id).slice(0, 1000))
+    .gte('received_at', new Date(Date.now() - 8 * 86_400_000).toISOString())
 
-  const knownIds = new Set((known ?? []).map((k: any) => k.message_id))
-  const todo = seen.filter((s) => !knownIds.has(s.id))
+  // Keyed by mailbox too — Gmail ids are only unique within one mailbox.
+  const key = (accountEmail: string, id: string) => `${accountEmail} ${id}`
+  const knownIds = new Set((known ?? []).map((k: any) => key(k.account_email, k.message_id)))
+  const todo = seen.filter((s) => !knownIds.has(key(s.account.email, s.id)))
   const batchIds = todo.slice(0, MAX_PER_RUN)
 
   // 3. Fetch full bodies for just this batch, in parallel.
@@ -350,7 +358,7 @@ Deno.serve(async (req) => {
       })
       const { error } = await admin
         .from('email_verdicts')
-        .upsert(rows, { onConflict: 'user_id,message_id' })
+        .upsert(rows, { onConflict: 'user_id,account_email,message_id' })
       if (error) return json({ error: `Saving verdicts failed: ${error.message}` }, 500)
       classified = rows.length
     } catch (e) {

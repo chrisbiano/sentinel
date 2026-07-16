@@ -75,9 +75,11 @@ Deno.serve(async (req) => {
 
   let body: any = {}
   try { body = await req.json() } catch { /* no body */ }
-  const { messageId, action } = body
-  if (!messageId || !['read', 'trash', 'unsubscribe'].includes(action)) {
-    return json({ error: 'Expected { messageId, action: read|trash|unsubscribe }' }, 400)
+  // accountEmail is required, not optional: Gmail message ids are unique per
+  // mailbox, so an id alone doesn't identify a message across six accounts.
+  const { messageId, accountEmail, action } = body
+  if (!messageId || !accountEmail || !['read', 'trash', 'unsubscribe'].includes(action)) {
+    return json({ error: 'Expected { messageId, accountEmail, action: read|trash|unsubscribe }' }, 400)
   }
 
   // Read the row through the *user's* id, so one person can never act on
@@ -86,6 +88,7 @@ Deno.serve(async (req) => {
     .from('email_verdicts')
     .select('message_id, account_email, unsubscribe_url')
     .eq('user_id', u.user.id)
+    .eq('account_email', accountEmail)
     .eq('message_id', messageId)
     .single()
   if (!row) return json({ error: 'No such message' }, 404)
@@ -141,6 +144,7 @@ Deno.serve(async (req) => {
     .from('email_verdicts')
     .update({ handled_at: new Date().toISOString() })
     .eq('user_id', u.user.id)
+    .eq('account_email', accountEmail)
     .eq('message_id', messageId)
 
   return json({ ok: true, action, note })

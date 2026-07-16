@@ -39,11 +39,11 @@ function EmailRow({ email, onAct, busy }) {
   const trash = () => {
     if (!confirming) { setConfirming(true); return }
     setConfirming(false)
-    onAct(email.message_id, 'trash')
+    onAct(email, 'trash')
   }
 
   const unsubscribe = async () => {
-    const res = await onAct(email.message_id, 'unsubscribe')
+    const res = await onAct(email, 'unsubscribe')
     // No RFC 8058 endpoint — hand it off rather than guessing at a link.
     if (res && res.oneClick === false) {
       if (email.unsubscribe_url) window.open(email.unsubscribe_url, '_blank', 'noopener')
@@ -83,7 +83,7 @@ function EmailRow({ email, onAct, busy }) {
           Open in Gmail
         </a>
         <button
-          onClick={() => onAct(email.message_id, 'read')}
+          onClick={() => onAct(email, 'read')}
           className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors"
         >
           Mark read
@@ -124,7 +124,7 @@ export default function EmailSection({
   onClearError,
 }) {
   const [tab, setTab] = useState('reply')
-  const [busyId, setBusyId] = useState(null)
+  const [busyKey, setBusyKey] = useState(null)
 
   const counts = Object.fromEntries(
     BUCKETS.map(b => [b.key, emails.filter(e => e.action === b.key).length])
@@ -132,10 +132,14 @@ export default function EmailSection({
   const shown = emails.filter(e => e.action === tab)
   const active = BUCKETS.find(b => b.key === tab)
 
-  const act = async (messageId, action) => {
-    setBusyId(messageId)
-    const res = await onAct(messageId, action)
-    setBusyId(null)
+  // Gmail ids only identify a message within one mailbox, so every key here is
+  // mailbox + id — otherwise two accounts could shadow each other in the list.
+  const rowKey = (e) => `${e.account_email} ${e.message_id}`
+
+  const act = async (email, action) => {
+    setBusyKey(rowKey(email))
+    const res = await onAct(email.message_id, email.account_email, action)
+    setBusyKey(null)
     return res
   }
 
@@ -210,10 +214,10 @@ export default function EmailSection({
         ) : (
           shown.map(email => (
             <EmailRow
-              key={email.message_id}
+              key={rowKey(email)}
               email={email}
               onAct={act}
-              busy={busyId === email.message_id}
+              busy={busyKey === rowKey(email)}
             />
           ))
         )}
