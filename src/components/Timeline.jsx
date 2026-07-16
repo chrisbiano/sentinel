@@ -150,14 +150,20 @@ export default function Timeline({
     return { ...it, insideTitle: container ? container.title : null }
   })
 
-  // A persistent 7 AM – 7 PM frame so the day always has the same shape. Items
-  // sort in between; the markers are interleaved by time, so the odd 6 AM run
-  // or 9 PM thing pokes just outside the frame instead of being mis-ordered.
-  const anchors = [
-    { id: 'anchor-am', isAnchor: true, _s: 7 * 60, label: '7:00 AM' },
-    { id: 'anchor-pm', isAnchor: true, _s: 19 * 60, label: '7:00 PM' },
-  ]
-  const rows = [...anchors, ...decorated].sort((a, b) => a._s - b._s)
+  // An every-other-hour ruler (…7, 9, 11, 1, 3, 5, 7…) down the rail. Empty
+  // hours render as faint marks, so a long gap between two items reads as a
+  // real gap instead of two neighbors — the list stops lying about time.
+  // The range always spans at least 7 AM–7 PM, and stretches to cover an early
+  // riser or a late night; snapped to odd hours so 7 AM and 7 PM are always marks.
+  const startMinAll = Math.min(7 * 60, ...spans.map(s => s._s))
+  const endMinAll = Math.max(19 * 60, ...spans.map(s => s._e))
+  const startH = (() => { const h = Math.floor(startMinAll / 60); return h % 2 ? h : h - 1 })()
+  const endH = (() => { const h = Math.ceil(endMinAll / 60); return h % 2 ? h : h + 1 })()
+  const ticks = []
+  for (let h = startH; h <= endH; h += 2) {
+    ticks.push({ id: `tick-${h}`, isTick: true, _s: h * 60, label: formatMin(h * 60) })
+  }
+  const rows = [...ticks, ...decorated].sort((a, b) => a._s - b._s)
 
   return (
     <section>
@@ -225,12 +231,12 @@ export default function Timeline({
         ) : (
           <>
         <ol className="relative border-l border-line ml-[4.75rem] py-2">
-          {rows.map(item => item.isAnchor ? (
-            <li key={item.id} className="relative pl-6 pr-4 py-1.5">
-              <span className="absolute -left-[4.75rem] top-1.5 w-16 text-right text-[10px] text-faint tabular-nums">
+          {rows.map(item => item.isTick ? (
+            <li key={item.id} className="relative pl-6 pr-4 py-2">
+              <span className="absolute -left-[4.75rem] -top-1 w-16 text-right text-[10px] text-faint tabular-nums">
                 {item.label}
               </span>
-              <span className="absolute -left-[3px] top-2 w-1.5 h-1.5 rounded-full bg-line" />
+              <span className="absolute -left-[2.5px] top-0 w-1.5 h-1.5 rounded-full bg-line" />
             </li>
           ) : (
             <li
