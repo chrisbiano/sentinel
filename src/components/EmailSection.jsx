@@ -47,14 +47,8 @@ function StarIcon({ filled }) {
 function EmailRow({ email, onAct, onReply, onRead, onReclassify, onFlag, onAddToTasks, busy }) {
   const [confirming, setConfirming] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
-  const [added, setAdded] = useState(false)
   const moveTargets = BUCKETS.filter(b => b.key !== email.action)
-
-  const addTask = () => {
-    onAddToTasks(email)
-    setAdded(true)
-    setTimeout(() => setAdded(false), 2000)
-  }
+  const taskAdded = Boolean(email.task_created)
 
   const trash = () => {
     if (!confirming) { setConfirming(true); return }
@@ -146,14 +140,21 @@ function EmailRow({ email, onAct, onReply, onRead, onReclassify, onFlag, onAddTo
 
         {/* Row 2 — deal-with-it-later on the left; organize/remove on the right. */}
         <div className="flex items-center gap-2 flex-wrap mt-2">
-          {/* "Answer this later" — drops a don't-forget task into Today. */}
+          {/* "Answer this later" — drops a don't-forget task into Today. Once
+              added it greys out for good, so it can't spawn a duplicate. */}
           <button
-            onClick={addTask}
-            disabled={added}
-            title="Add a reminder to reply, under Today's tasks"
-            className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors disabled:opacity-70"
+            onClick={() => onAddToTasks(email)}
+            disabled={taskAdded}
+            title={taskAdded
+              ? "Already in Today's tasks"
+              : "Add a reminder to reply, under Today's tasks"}
+            className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+              taskAdded
+                ? 'border-line text-faint cursor-default'
+                : 'border-line2 text-muted hover:text-fg hover:bg-surface2'
+            }`}
           >
-            {added ? 'Added ✓' : '+ Task'}
+            {taskAdded ? '✓ Task added' : '+ Task'}
           </button>
 
           <div className="flex items-center gap-2 ml-auto">

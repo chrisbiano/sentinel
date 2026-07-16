@@ -88,6 +88,7 @@ export default function App() {
     dismiss: dismissEmail,
     reclassify: reclassifyEmail,
     toggleFlag: toggleEmailFlag,
+    markTaskAdded: markEmailTaskAdded,
     undoable: emailUndoable,
     undo: undoEmail,
     dismissUndo: dismissEmailUndo,
@@ -140,11 +141,14 @@ export default function App() {
   }
 
   // "This needs an answer, but not right now." Drops a dateless task that rides
-  // Today forward until it's checked off — the don't-forget-to-reply net.
+  // Today forward until it's checked off — the don't-forget-to-reply net. Marks
+  // the email so its + Task button greys out and can't make a duplicate.
   const addEmailToTasks = (email) => {
+    if (email.task_created) return
     const who = email.sender || email.sender_email || 'someone'
     const subject = email.subject || '(no subject)'
     addTask({ title: `Reply: ${who} — ${subject}`, date: null })
+    markEmailTaskAdded(email)
   }
 
   // Dated tasks belong to their day. A general task (no date) just lives under

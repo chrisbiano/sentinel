@@ -134,6 +134,22 @@ export default function useEmails() {
     setUndoable(null)
   }, [])
 
+  /* Remember that a "reply later" task was made for this email, so its + Task
+     button stays greyed and can't spawn a duplicate — persists across reloads. */
+  const markTaskAdded = useCallback(async (email) => {
+    const previous = emails
+    setEmails(list => list.map(e => (same(e, email) ? { ...e, task_created: true } : e)))
+    const { error: dbError } = await supabase
+      .from('email_verdicts')
+      .update({ task_created: true })
+      .eq('message_id', email.message_id)
+      .eq('account_email', email.account_email)
+    if (dbError) {
+      setEmails(previous)
+      setError(`Couldn't mark that email: ${dbError.message}`)
+    }
+  }, [emails])
+
   // Drop a message from the list with no server call — for actions already
   // completed server-side (e.g. a sent reply, which gmail-send marks handled).
   const dismiss = useCallback((messageId, accountEmail) => {
@@ -198,6 +214,7 @@ export default function useEmails() {
     dismiss,
     reclassify,
     toggleFlag,
+    markTaskAdded,
     undoable,
     undo,
     dismissUndo,
