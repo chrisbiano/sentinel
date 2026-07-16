@@ -133,21 +133,9 @@ export default function Timeline({
     return 0
   })
 
-  // Which items sit *inside* a longer block? A shorter item fully enclosed by a
-  // longer one (a noon task during a 9:30–2 work block) gets indented under it
-  // with a "during …" tag, so it reads as happening within the block rather
-  // than after it. One level of nesting; the outermost/longest block wins.
   const spans = items.map(it => {
     const s = toMinutes(it.time)
     return { ...it, _s: s, _e: s + (it.duration || 0) }
-  })
-  const decorated = spans.map((it, i) => {
-    let container = null
-    spans.forEach((o, j) => {
-      const encloses = o._s <= it._s && o._e >= it._e && o.duration > it.duration
-      if (j !== i && encloses && (!container || o.duration > container.duration)) container = o
-    })
-    return { ...it, insideTitle: container ? container.title : null }
   })
 
   // An every-other-hour ruler (…7, 9, 11, 1, 3, 5, 7…) down the rail. Empty
@@ -163,7 +151,25 @@ export default function Timeline({
   for (let h = startH; h <= endH; h += 2) {
     ticks.push({ id: `tick-${h}`, isTick: true, _s: h * 60, label: formatMin(h * 60) })
   }
-  const rows = [...ticks, ...decorated].sort((a, b) => a._s - b._s)
+
+  // Nest everything whose start falls inside a longer block — ruler marks and
+  // items alike — so the indent runs unbroken from the block's start to its
+  // end. Otherwise the block looks like it stops and restarts around a task
+  // that happens during it. Items also get a "during …" tag; marks just indent.
+  const blocks = spans.filter(b => (b.duration || 0) > 0)
+  const rows = [...ticks, ...spans]
+    .sort((a, b) => a._s - b._s)
+    .map(r => {
+      let container = null
+      for (const b of blocks) {
+        if (b === r) continue
+        // Strictly after the block's start — a mark at the start of a block
+        // isn't "inside" it, it announces it.
+        const inside = b._s < r._s && r._s < b._e && (b.duration || 0) > (r.duration || 0)
+        if (inside && (!container || b.duration > container.duration)) container = b
+      }
+      return { ...r, inside: Boolean(container), insideTitle: container ? container.title : null }
+    })
 
   return (
     <section>
@@ -232,8 +238,17 @@ export default function Timeline({
           <>
         <ol className="relative border-l border-line ml-[4.75rem] py-2">
           {rows.map(item => item.isTick ? (
-            <li key={item.id} className="relative pl-6 pr-4 py-2">
-              <span className="absolute -left-[4.75rem] -top-1 w-16 text-right text-[10px] text-faint tabular-nums">
+            <li
+              key={item.id}
+              className={`relative pr-4 py-2 ${
+                item.inside ? 'pl-6 ml-[18px] border-l border-line' : 'pl-6'
+              }`}
+            >
+              <span
+                className={`absolute -top-1 w-16 text-right text-[10px] text-faint tabular-nums ${
+                  item.inside ? '-left-[calc(4.75rem+18px)]' : '-left-[4.75rem]'
+                }`}
+              >
                 {item.label}
               </span>
               <span className="absolute -left-[2.5px] top-0 w-1.5 h-1.5 rounded-full bg-line" />
@@ -242,14 +257,14 @@ export default function Timeline({
             <li
               key={item.id}
               className={`relative pr-4 py-2.5 ${
-                item.insideTitle ? 'pl-6 ml-[18px] border-l border-line' : 'pl-6'
+                item.inside ? 'pl-6 ml-[18px] border-l border-line' : 'pl-6'
               }`}
             >
               {/* time label, left of the rail — pushed out further for an
                   indented (inside-a-block) row so it stays in the same gutter */}
               <span
                 className={`absolute top-3 w-16 text-right text-xs text-muted tabular-nums ${
-                  item.insideTitle ? '-left-[calc(4.75rem+18px)]' : '-left-[4.75rem]'
+                  item.inside ? '-left-[calc(4.75rem+18px)]' : '-left-[4.75rem]'
                 }`}
               >
                 {item.time}
@@ -260,7 +275,7 @@ export default function Timeline({
               {item.duration >= 60 && (
                 <span
                   className={`absolute bottom-3 w-16 text-right text-[10px] text-faint tabular-nums ${
-                    item.insideTitle ? '-left-[calc(4.75rem+18px)]' : '-left-[4.75rem]'
+                    item.inside ? '-left-[calc(4.75rem+18px)]' : '-left-[4.75rem]'
                   }`}
                 >
                   {formatMin(item._e)}
