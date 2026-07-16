@@ -39,14 +39,16 @@ function toMinutes(t) {
   return h * 60 + min
 }
 
-function endLabel(startMin, duration) {
-  const total = startMin + duration
+// "3:45 PM" for a minutes-past-midnight value.
+function formatMin(total) {
   const h24 = Math.floor(total / 60) % 24
-  const mm = String(total % 60).padStart(2, '0')
+  const mm = String(Math.round(total % 60)).padStart(2, '0')
   const ampm = h24 < 12 ? 'AM' : 'PM'
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12
   return `${h12}:${mm} ${ampm}`
 }
+
+const endLabel = (startMin, duration) => formatMin(startMin + duration)
 
 export default function Timeline({
   tasks,
@@ -148,6 +150,10 @@ export default function Timeline({
     return { ...it, insideTitle: container ? container.title : null }
   })
 
+  // When the day's last thing wraps — anchors the bottom of the rail so you can
+  // see where the day is headed, not just where it starts.
+  const dayEndMin = spans.length ? Math.max(...spans.map(s => s._e)) : null
+
   return (
     <section>
       <SectionHeader
@@ -230,6 +236,18 @@ export default function Timeline({
               >
                 {item.time}
               </span>
+              {/* End time on the gutter for real blocks (≥1h), so you can see
+                  when a long block lets out — not just when it begins. Short
+                  items skip it; start and end would be cramped and redundant. */}
+              {item.duration >= 60 && (
+                <span
+                  className={`absolute bottom-3 w-16 text-right text-[10px] text-faint tabular-nums ${
+                    item.insideTitle ? '-left-[calc(4.75rem+18px)]' : '-left-[4.75rem]'
+                  }`}
+                >
+                  {formatMin(item._e)}
+                </span>
+              )}
               {/* node on the rail */}
               <span
                 className={`absolute -left-[5px] top-3.5 w-2.5 h-2.5 rounded-full ring-4 ring-surface ${
@@ -351,6 +369,16 @@ export default function Timeline({
               </div>
             </li>
           ))}
+          {/* Where the day wraps — the rail runs down to the last item's end. */}
+          {dayEndMin != null && (
+            <li className="relative pl-6 pr-4 pt-1 pb-1">
+              <span className="absolute -left-[4.75rem] -top-0.5 w-16 text-right text-[10px] text-faint tabular-nums">
+                {formatMin(dayEndMin)}
+              </span>
+              <span className="absolute -left-[4px] top-1 w-2 h-2 rounded-full bg-surface2 border border-line2 ring-4 ring-surface" />
+              <span className="text-[10px] text-faint">day wraps up</span>
+            </li>
+          )}
         </ol>
             <button
               onClick={() => setAddingTask(true)}
