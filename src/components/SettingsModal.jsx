@@ -45,18 +45,34 @@ function Toggle({ checked, onChange }) {
  *
  * This note is the difference between a venue's booking inquiry landing in
  * "Reply" and landing in "Junk" — without it, Claude only sees an email from a
- * stranger. Saved on blur; a mailbox with no note says so, loudly, because a
- * silent gap here shows up later as a confidently wrong verdict. */
+ * stranger. Once saved it collapses to a one-line gist with an Edit button, so
+ * a described mailbox reads as done rather than as an open box you're unsure
+ * about. The empty state nags on purpose — a missing note is a confidently
+ * wrong verdict later. */
 function AccountRow({ account, onSetPurpose, onDisconnect }) {
-  const [draft, setDraft] = useState(account.purpose ?? '')
+  const saved = account.purpose ?? ''
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(saved)
   const [saving, setSaving] = useState(false)
 
+  const dirty = draft.trim() !== saved.trim()
+
+  const open = () => { setDraft(saved); setEditing(true) }
+  const cancel = () => { setDraft(saved); setEditing(false) }
+
   const save = async () => {
-    if (draft.trim() === (account.purpose ?? '').trim()) return
+    if (!dirty) { setEditing(false); return }
     setSaving(true)
-    await onSetPurpose(account.id, draft)
+    const res = await onSetPurpose(account.id, draft)
     setSaving(false)
+    // Stay open on failure so the text isn't lost; collapse only on success.
+    if (res?.ok !== false) setEditing(false)
   }
+
+  // One-line gist for the collapsed view — cut on a word boundary.
+  const gist = saved.trim().length > 64
+    ? saved.trim().slice(0, 64).replace(/\s+\S*$/, '') + '…'
+    : saved.trim()
 
   return (
     <div className="py-2 border-b border-line last:border-0">
@@ -75,25 +91,55 @@ function AccountRow({ account, onSetPurpose, onDisconnect }) {
         </button>
       </div>
 
-      <textarea
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onBlur={save}
-        rows={2}
-        placeholder="What's this mailbox for? e.g. “My band Lost Saints — booking inquiries from venues and promoters, plus press. Anything about a date or a show matters.”"
-        className="input w-full text-xs mt-2 resize-none"
-      />
-      <p className="text-xs mt-1">
-        {saving ? (
-          <span className="text-faint">Saving…</span>
-        ) : draft.trim() ? (
-          <span className="text-faint">Claude uses this to judge what matters here.</span>
-        ) : (
-          <span className="text-muted">
-            No context yet — Claude will guess, and it will guess wrong on the mail you care about.
-          </span>
-        )}
-      </p>
+      {editing ? (
+        <div className="mt-2">
+          <textarea
+            autoFocus
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            rows={3}
+            placeholder="What's this mailbox for? e.g. “My band Lost Saints — booking inquiries from venues and promoters, plus press. Anything about a date or a show matters.”"
+            className="input w-full text-xs resize-none"
+          />
+          <div className="flex items-center justify-end gap-2 mt-1.5">
+            <button
+              onClick={cancel}
+              className="text-xs text-faint hover:text-fg transition-colors px-2 py-1"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={save}
+              disabled={saving}
+              className="text-xs px-3 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      ) : saved.trim() ? (
+        <div className="flex items-center justify-between gap-3 mt-2">
+          <p className="text-xs text-muted italic truncate">“{gist}”</p>
+          <button
+            onClick={open}
+            className="text-xs text-faint hover:text-fg border border-line px-2.5 py-1 rounded-full shrink-0 transition-colors"
+          >
+            Edit
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-3 mt-2">
+          <p className="text-xs text-muted min-w-0">
+            No context yet — Claude will guess, and guess wrong on the mail you care about.
+          </p>
+          <button
+            onClick={open}
+            className="text-xs px-2.5 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity shrink-0"
+          >
+            Add context
+          </button>
+        </div>
+      )}
     </div>
   )
 }
