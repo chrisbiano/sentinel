@@ -15,6 +15,7 @@ import { weekDays, monthGrid } from './lib/dates'
 import EmailSection from './components/EmailSection'
 import TasksSection from './components/TasksSection'
 import SettingsModal from './components/SettingsModal'
+import UndoToast from './components/UndoToast'
 
 const SETTINGS_KEY = 'sentinel.settings.v1'
 const defaultSettings = { hideCompleted: false }
@@ -87,6 +88,9 @@ export default function App() {
     dismiss: dismissEmail,
     reclassify: reclassifyEmail,
     toggleFlag: toggleEmailFlag,
+    undoable: emailUndoable,
+    undo: undoEmail,
+    dismissUndo: dismissEmailUndo,
   } = useEmails()
 
   // Real events from every connected Google Calendar, merged onto the timeline.
@@ -299,6 +303,12 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         settings={settings}
         onChange={setSettings}
+      />
+
+      <UndoToast
+        undoable={emailUndoable}
+        onUndo={undoEmail}
+        onDismiss={dismissEmailUndo}
       />
     </Layout>
   )

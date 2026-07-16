@@ -20,7 +20,19 @@ export default function useEmails() {
   const [remaining, setRemaining] = useState(0)
   const [error, setError] = useState(null)
   const [accountErrors, setAccountErrors] = useState([])
+  const [undoable, setUndoable] = useState(null)   // { email, action, label } | null
   const started = useRef(false)   // StrictMode double-invokes effects; classify once
+  const undoTimer = useRef(null)
+
+  useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current) }, [])
+
+  // Offer a few seconds to take back a reversible action (mark-read / trash).
+  const armUndo = useCallback((email, action) => {
+    if (undoTimer.current) clearTimeout(undoTimer.current)
+    const label = action === 'trash' ? 'Moved to Trash' : 'Marked read'
+    setUndoable({ email, action, label })
+    undoTimer.current = setTimeout(() => setUndoable(null), 6000)
+  }, [])
 
   const runPass = useCallback(async () => {
     const { data, error: fnError } = await supabase.functions.invoke('gmail-messages')
@@ -66,6 +78,8 @@ export default function useEmails() {
    * mailbox, not across them. */
   const act = useCallback(async (messageId, accountEmail, action) => {
     const previous = emails
+    // Capture the whole email before removing it, so undo can put it back.
+    const target = emails.find(e => e.message_id === messageId && e.account_email === accountEmail)
     setEmails(prev => prev.filter(
       e => !(e.message_id === messageId && e.account_email === accountEmail)
     ))
@@ -81,6 +95,9 @@ export default function useEmails() {
         if (data.error === 'no_one_click') { setEmails(previous); return { oneClick: false } }
         throw new Error(data.error)
       }
+      // Reversible actions get a few-second Undo. Sent/unsubscribe don't — those
+      // can't be truly taken back, so no misleading offer.
+      if (target && (action === 'read' || action === 'trash')) armUndo(target, action)
       return { ok: true, note: data?.note }
     } catch (e) {
       console.error(`Mail action "${action}" failed:`, e)
@@ -88,7 +105,34 @@ export default function useEmails() {
       setError(e.message || `Could not ${action} that message`)
       return { ok: false }
     }
-  }, [emails])
+  }, [emails, armUndo])
+
+  // Take back the last mark-read / trash: restore it locally and reverse the
+  // Gmail change (re-mark unread / untrash, and un-handle the row).
+  const undo = useCallback(async () => {
+    const u = undoable
+    if (!u) return
+    if (undoTimer.current) clearTimeout(undoTimer.current)
+    setUndoable(null)
+    setError(null)
+    setEmails(list =>
+      list.some(e => e.message_id === u.email.message_id && e.account_email === u.email.account_email)
+        ? list
+        : [...list, u.email].sort((a, b) => String(b.received_at).localeCompare(String(a.received_at)))
+    )
+    const reverse = u.action === 'read' ? 'unread' : 'untrash'
+    const { data, error: fnError } = await supabase.functions.invoke('gmail-action', {
+      body: { messageId: u.email.message_id, accountEmail: u.email.account_email, action: reverse },
+    })
+    if (fnError || data?.error) {
+      setError((data && data.error) || fnError?.message || "Couldn't undo that")
+    }
+  }, [undoable])
+
+  const dismissUndo = useCallback(() => {
+    if (undoTimer.current) clearTimeout(undoTimer.current)
+    setUndoable(null)
+  }, [])
 
   // Drop a message from the list with no server call — for actions already
   // completed server-side (e.g. a sent reply, which gmail-send marks handled).
@@ -154,5 +198,8 @@ export default function useEmails() {
     dismiss,
     reclassify,
     toggleFlag,
+    undoable,
+    undo,
+    dismissUndo,
   }
 }

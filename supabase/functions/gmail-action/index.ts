@@ -78,8 +78,9 @@ Deno.serve(async (req) => {
   // accountEmail is required, not optional: Gmail message ids are unique per
   // mailbox, so an id alone doesn't identify a message across six accounts.
   const { messageId, accountEmail, action } = body
-  if (!messageId || !accountEmail || !['read', 'trash', 'unsubscribe', 'star', 'unstar'].includes(action)) {
-    return json({ error: 'Expected { messageId, accountEmail, action: read|trash|unsubscribe|star|unstar }' }, 400)
+  const ACTIONS = ['read', 'trash', 'unsubscribe', 'star', 'unstar', 'unread', 'untrash']
+  if (!messageId || !accountEmail || !ACTIONS.includes(action)) {
+    return json({ error: `Expected { messageId, accountEmail, action: ${ACTIONS.join('|')} }` }, 400)
   }
 
   // Read the row through the *user's* id, so one person can never act on
@@ -126,6 +127,27 @@ Deno.serve(async (req) => {
       .eq('message_id', messageId)
 
     return json({ ok: true, action, flagged: starred })
+  }
+
+  // Undo for mark-read / trash: reverse the Gmail change and un-handle the row
+  // so it returns to the list. Not terminal — no handled_at set (we clear it).
+  if (action === 'unread' || action === 'untrash') {
+    const r = action === 'unread'
+      ? await fetch(`${base}/modify`, {
+          method: 'POST', headers: auth,
+          body: JSON.stringify({ addLabelIds: ['UNREAD'] }),
+        })
+      : await fetch(`${base}/untrash`, { method: 'POST', headers: auth })
+    if (!r.ok) return json({ error: `Gmail refused the undo (HTTP ${r.status})` }, 502)
+
+    await admin
+      .from('email_verdicts')
+      .update({ handled_at: null })
+      .eq('user_id', u.user.id)
+      .eq('account_email', accountEmail)
+      .eq('message_id', messageId)
+
+    return json({ ok: true, action })
   }
 
   let note: string | null = null
