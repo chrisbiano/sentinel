@@ -150,9 +150,14 @@ export default function Timeline({
     return { ...it, insideTitle: container ? container.title : null }
   })
 
-  // When the day's last thing wraps — anchors the bottom of the rail so you can
-  // see where the day is headed, not just where it starts.
-  const dayEndMin = spans.length ? Math.max(...spans.map(s => s._e)) : null
+  // A persistent 7 AM – 7 PM frame so the day always has the same shape. Items
+  // sort in between; the markers are interleaved by time, so the odd 6 AM run
+  // or 9 PM thing pokes just outside the frame instead of being mis-ordered.
+  const anchors = [
+    { id: 'anchor-am', isAnchor: true, _s: 7 * 60, label: '7:00 AM' },
+    { id: 'anchor-pm', isAnchor: true, _s: 19 * 60, label: '7:00 PM' },
+  ]
+  const rows = [...anchors, ...decorated].sort((a, b) => a._s - b._s)
 
   return (
     <section>
@@ -220,7 +225,14 @@ export default function Timeline({
         ) : (
           <>
         <ol className="relative border-l border-line ml-[4.75rem] py-2">
-          {decorated.map(item => (
+          {rows.map(item => item.isAnchor ? (
+            <li key={item.id} className="relative pl-6 pr-4 py-1.5">
+              <span className="absolute -left-[4.75rem] top-1.5 w-16 text-right text-[10px] text-faint tabular-nums">
+                {item.label}
+              </span>
+              <span className="absolute -left-[3px] top-2 w-1.5 h-1.5 rounded-full bg-line" />
+            </li>
+          ) : (
             <li
               key={item.id}
               className={`relative pr-4 py-2.5 ${
@@ -369,16 +381,6 @@ export default function Timeline({
               </div>
             </li>
           ))}
-          {/* Where the day wraps — the rail runs down to the last item's end. */}
-          {dayEndMin != null && (
-            <li className="relative pl-6 pr-4 pt-1 pb-1">
-              <span className="absolute -left-[4.75rem] -top-0.5 w-16 text-right text-[10px] text-faint tabular-nums">
-                {formatMin(dayEndMin)}
-              </span>
-              <span className="absolute -left-[4px] top-1 w-2 h-2 rounded-full bg-surface2 border border-line2 ring-4 ring-surface" />
-              <span className="text-[10px] text-faint">day wraps up</span>
-            </li>
-          )}
         </ol>
             <button
               onClick={() => setAddingTask(true)}
