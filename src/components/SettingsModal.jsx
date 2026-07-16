@@ -342,7 +342,7 @@ export default function SettingsModal({ open, onClose, settings, onChange }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 bg-black/60"
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 bg-black/60 overflow-y-auto"
       onClick={onClose}
     >
       <div
@@ -350,9 +350,9 @@ export default function SettingsModal({ open, onClose, settings, onChange }) {
         aria-modal="true"
         aria-label="Settings"
         onClick={e => e.stopPropagation()}
-        className="w-full max-w-md mt-16 sm:mt-0 bg-surface border border-line2 rounded-2xl shadow-xl"
+        className="w-full max-w-md my-8 sm:my-0 bg-surface border border-line2 rounded-2xl shadow-xl flex flex-col max-h-[85vh]"
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-line">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
           <h2 className="text-base font-medium text-fg">Settings</h2>
           <button
             onClick={onClose}
@@ -363,7 +363,7 @@ export default function SettingsModal({ open, onClose, settings, onChange }) {
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-6">
+        <div className="px-5 py-4 space-y-6 overflow-y-auto flex-1 min-h-0">
           {/* Preferences */}
           <div>
             <h3 className="text-xs font-medium text-faint uppercase tracking-wider mb-3">Preferences</h3>

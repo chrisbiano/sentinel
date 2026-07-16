@@ -50,3 +50,15 @@
            placeholder:text-faint focus:outline-none focus:ring-1 focus:ring-fg/30 focus:border-transparent;
   }
 }
+
+/* iOS yanks the whole page into a zoom whenever you focus a field whose
+   font-size is under 16px — and our inputs run 12–14px for density. On
+   touch-width screens, force 16px so tapping into a box no longer zooms and
+   strands you looking at a cut-off field. Desktop keeps the compact sizing. */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
