@@ -62,13 +62,17 @@ function Row({ s, onToggle, onRemove, onEdit }) {
             if (e.key === 'Enter') save()
             if (e.key === 'Escape') setEditing(false)
           }}
-          className="input flex-1 py-0.5 text-xs"
+          // flex-1 + min-w-0 + w-0 lets the field shrink to the column instead of
+          // running off the right edge of the phone; size=1 kills the browser's
+          // ~20-char intrinsic minimum width.
+          size={1}
+          className="input flex-1 min-w-0 w-0 py-0.5 text-xs"
         />
       ) : (
         <span
-          onDoubleClick={() => { setDraft(s.title); setEditing(true) }}
-          title="Double-click to edit"
-          className={`text-xs flex-1 min-w-0 cursor-text ${s.done ? 'line-through text-faint' : 'text-muted'}`}
+          onClick={() => { setDraft(s.title); setEditing(true) }}
+          title="Tap to edit"
+          className={`text-xs flex-1 min-w-0 break-words cursor-text ${s.done ? 'line-through text-faint' : 'text-muted'}`}
         >
           {s.title}
         </span>

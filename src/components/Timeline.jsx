@@ -22,15 +22,16 @@ function EditableTitle({ title, done, editable, overlaps, onSave }) {
         onChange={e => setDraft(e.target.value)}
         onBlur={save}
         onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-        className="input py-0.5 text-sm font-medium flex-1 min-w-0"
+        size={1}
+        className="input py-0.5 text-sm font-medium flex-1 min-w-0 w-0"
       />
     )
   }
   const color = done ? 'line-through text-faint' : overlaps ? 'text-amber-400' : 'text-fg'
   return (
     <h3
-      onDoubleClick={() => { if (editable) { setDraft(title); setEditing(true) } }}
-      title={editable ? 'Double-click to edit' : undefined}
+      onClick={() => { if (editable) { setDraft(title); setEditing(true) } }}
+      title={editable ? 'Tap to edit' : undefined}
       className={`font-medium text-sm ${color} ${editable && !done ? 'cursor-text' : ''}`}
     >
       {title}
