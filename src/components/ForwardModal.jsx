@@ -16,6 +16,7 @@ export default function ForwardModal({ email, onClose, onSent }) {
   const [to, setTo] = useState('')             // the picked recipient email
   const [suggestions, setSuggestions] = useState([])
   const [searching, setSearching] = useState(false)
+  const [contactNote, setContactNote] = useState(null)   // why the list is empty
   const [subject, setSubject] = useState(fwdSubject)
   const [text, setText] = useState('')
   const [signatureHtml, setSignatureHtml] = useState(null)
@@ -41,14 +42,21 @@ export default function ForwardModal({ email, onClose, onSent }) {
   const onQueryChange = (v) => {
     setQuery(v)
     setTo('')                                  // typing invalidates a prior pick
+    setContactNote(null)
     if (debounce.current) clearTimeout(debounce.current)
     if (v.trim().length < 2) { setSuggestions([]); setSearching(false); return }
     setSearching(true)
     debounce.current = setTimeout(async () => {
-      const { data } = await supabase.functions.invoke('contacts-search', {
+      const { data, error: fnError } = await supabase.functions.invoke('contacts-search', {
         body: { accountEmail: email.account_email, query: v.trim() },
       })
-      setSuggestions(data?.contacts ?? [])
+      const list = data?.contacts ?? []
+      setSuggestions(list)
+      // Surface why it's empty so an empty dropdown isn't a silent mystery.
+      if (fnError) setContactNote('Contact search failed — you can still type a full email.')
+      else if (data?.error) setContactNote(data.error)
+      else if (list.length === 0) setContactNote('No matches — type the full email address.')
+      else setContactNote(null)
       setSearching(false)
     }, 250)
   }
@@ -123,11 +131,11 @@ export default function ForwardModal({ email, onClose, onSent }) {
                 placeholder="Type a name or email…"
                 className="input w-full py-1 text-sm"
               />
-              {(searching || suggestions.length > 0) && query.trim().length >= 2 && (
+              {query.trim().length >= 2 && !to && (
                 <div className="absolute left-0 right-0 top-full mt-1 z-10 bg-surface border border-line2 rounded-lg shadow-xl max-h-52 overflow-y-auto">
-                  {searching && suggestions.length === 0 ? (
+                  {searching ? (
                     <p className="text-xs text-faint px-3 py-2">Searching contacts…</p>
-                  ) : (
+                  ) : suggestions.length > 0 ? (
                     suggestions.map(c => (
                       <button
                         key={c.email}
@@ -140,6 +148,8 @@ export default function ForwardModal({ email, onClose, onSent }) {
                         )}
                       </button>
                     ))
+                  ) : (
+                    <p className="text-xs text-muted px-3 py-2">{contactNote || 'No matches.'}</p>
                   )}
                 </div>
               )}
