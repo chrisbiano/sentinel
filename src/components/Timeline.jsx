@@ -146,18 +146,18 @@ export default function Timeline({
     ticks.push({ id: `tick-${h}`, isTick: true, _s: h * 60, label: formatMin(h * 60) })
   }
 
-  // Two different relationships between overlapping items:
-  //  · fully contained  → a short thing entirely inside a longer block; it's
-  //                       "during" that block, and gets tucked inside its outline.
-  //  · true conflict    → times intersect but neither wholly contains the other
-  //                       (a partial overlap, or two things booked at once). A
-  //                       possible double-booking — flagged, never hidden.
+  // A block owns its window; work inside it should be that block's subtasks. So
+  // any *separate* item that lays claim to the same time is a double-booking —
+  // whether it's tucked entirely inside a block or spilling past its edge. Flag
+  // the intruder, not the block: X is flagged if it intersects some Y that X
+  // does not itself contain (a longer block it sits inside, or a peer it fights
+  // with). The block that contains everything stays clean — it's not the problem.
   const contains = (a, b) => a !== b && a._s <= b._s && b._e <= a._e && a.duration > b.duration
   const intersects = (a, b) => a._s < b._e && b._s < a._e
   const conflicts = new Set()
   for (const a of spans) {
     for (const b of spans) {
-      if (a !== b && intersects(a, b) && !contains(a, b) && !contains(b, a)) { conflicts.add(a); break }
+      if (a !== b && intersects(a, b) && !contains(a, b)) { conflicts.add(a); break }
     }
   }
 
@@ -216,13 +216,16 @@ export default function Timeline({
           aria-label={`Mark ${item.title} ${item.kind === 'event' ? 'wrapped up' : 'complete'}`}
           className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer shrink-0"
         />
-        <h3 className={`font-medium text-sm ${item.done ? 'line-through text-faint' : 'text-fg'}`}>
+        <h3 className={`font-medium text-sm ${
+          item.done ? 'line-through text-faint' : item.overlaps ? 'text-amber-400' : 'text-fg'
+        }`}>
           {item.title}
         </h3>
-        {/* A real double-booking — a heads-up, not an error. */}
+        {/* A separate item claiming time another item already owns — a
+            heads-up to fold it into that block or move it. */}
         {item.overlaps && (
           <span className="text-[10px] text-amber-400 border border-amber-500/40 bg-amber-500/10 rounded px-1.5 py-0.5 whitespace-nowrap">
-            overlaps
+            double-booked
           </span>
         )}
         {item.kind === 'task' && item.hasReminder && (
