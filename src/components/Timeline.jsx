@@ -121,14 +121,10 @@ export default function Timeline({
       done: eventNotes[e.id]?.done || false,
     })),
   ].sort((a, b) => {
-    // Primary order: by start time — earliest on top, standard for a timeline.
     const byStart = toMinutes(a.time) - toMinutes(b.time)
     if (byStart !== 0) return byStart
-    // Same start: show the shorter one first, so a quick task at noon isn't
-    // buried under a long block that also happens to start at noon.
     const byLength = (a.duration || 0) - (b.duration || 0)
     if (byLength !== 0) return byLength
-    // Exact tie: a task before the calendar event it shares a slot with.
     if (a.kind !== b.kind) return a.kind === 'task' ? -1 : 1
     return 0
   })
@@ -138,11 +134,9 @@ export default function Timeline({
     return { ...it, _s: s, _e: s + (it.duration || 0) }
   })
 
-  // An every-other-hour ruler (…7, 9, 11, 1, 3, 5, 7…) down the rail. Empty
-  // hours render as faint marks, so a long gap between two items reads as a
-  // real gap instead of two neighbors — the list stops lying about time.
-  // The range always spans at least 7 AM–7 PM, and stretches to cover an early
-  // riser or a late night; snapped to odd hours so 7 AM and 7 PM are always marks.
+  // Every-other-hour ruler (…7, 9, 11, 1, 3, 5, 7…). Empty hours become faint
+  // marks so a long gap reads as a real gap. Always spans at least 7 AM–7 PM,
+  // snapped to odd hours, and stretches for an early riser or a late night.
   const startMinAll = Math.min(7 * 60, ...spans.map(s => s._s))
   const endMinAll = Math.max(19 * 60, ...spans.map(s => s._e))
   const startH = (() => { const h = Math.floor(startMinAll / 60); return h % 2 ? h : h - 1 })()
@@ -152,31 +146,235 @@ export default function Timeline({
     ticks.push({ id: `tick-${h}`, isTick: true, _s: h * 60, label: formatMin(h * 60) })
   }
 
-  // Nest everything whose start falls strictly inside a longer block — ruler
-  // marks and items alike — so the indent runs unbroken through the block. A
-  // mark at a block's own start stays flush (it announces the block).
-  const blocks = spans.filter(b => (b.duration || 0) > 0)
-  const baseRows = [...ticks, ...spans].sort((a, b) => a._s - b._s).map(r => {
-    let container = null
-    for (const b of blocks) {
-      if (b === r) continue
-      const inside = b._s < r._s && r._s < b._e && (b.duration || 0) > (r.duration || 0)
-      if (inside && (!container || b.duration > container.duration)) container = b
+  // Two different relationships between overlapping items:
+  //  · fully contained  → a short thing entirely inside a longer block; it's
+  //                       "during" that block, and gets tucked inside its outline.
+  //  · true conflict    → times intersect but neither wholly contains the other
+  //                       (a partial overlap, or two things booked at once). A
+  //                       possible double-booking — flagged, never hidden.
+  const contains = (a, b) => a !== b && a._s <= b._s && b._e <= a._e && a.duration > b.duration
+  const intersects = (a, b) => a._s < b._e && b._s < a._e
+  const conflicts = new Set()
+  for (const a of spans) {
+    for (const b of spans) {
+      if (a !== b && intersects(a, b) && !contains(a, b) && !contains(b, a)) { conflicts.add(a); break }
     }
-    return { ...r, inside: Boolean(container), insideTitle: container ? container.title : null, container }
-  })
+  }
 
-  // Each block that wraps a real item (or runs ≥2h) gets an end marker placed
-  // at its finish, IN TIME ORDER — so a long block's end shows on the gutter
-  // *after* its contents, closing the indent, instead of jumping in above them.
-  const withEnd = new Set()
-  baseRows.forEach(r => { if (r.container && !r.isTick) withEnd.add(r.container) })
-  blocks.forEach(b => { if (b.duration >= 120) withEnd.add(b) })
-  const endMarkers = [...withEnd].map(b => ({
-    id: `end-${b.id}`, isEnd: true, inside: true, _s: b._e, label: formatMin(b._e), endTitle: b.title,
+  // A block gets an outline box if it runs long (≥2h) or wraps a real item.
+  // A boxed block nested inside a bigger box doesn't get its own (one level).
+  const blocks = spans.filter(b => (b.duration || 0) > 0)
+  const boxable = blocks.filter(b => b.duration >= 120 || spans.some(x => contains(b, x)))
+  const boxBlocks = boxable.filter(b => !boxable.some(o => contains(o, b)))
+
+  // A row belongs to a box if it starts strictly inside the box (an item must
+  // also END inside — a thing that runs past the block is a conflict, not a
+  // tenant, and stays outside).
+  const ownerOf = (r) => boxBlocks.find(b =>
+    r.isTick
+      ? (b._s < r._s && r._s < b._e)
+      : (b._s < r._s && r._e <= b._e && b.duration > r.duration),
+  )
+
+  const groups = new Map(boxBlocks.map(b => [b, []]))
+  const top = []
+  for (const r of [...ticks, ...spans]) {
+    if (!r.isTick && boxBlocks.includes(r)) continue   // a box's own header, added below
+    const owner = ownerOf(r)
+    const row = r.isTick ? r : { ...r, overlaps: conflicts.has(r), insideBox: Boolean(owner) }
+    if (owner) groups.get(owner).push(row)
+    else top.push(row)
+  }
+  boxBlocks.forEach(b => {
+    groups.get(b).push({ id: `end-${b.id}`, isEnd: true, _s: b._e, label: formatMin(b._e), endTitle: b.title })
+  })
+  boxBlocks.forEach(b => top.push({
+    isBox: true, id: `box-${b.id}`, _s: b._s, block: { ...b, overlaps: conflicts.has(b) }, kids: groups.get(b),
   }))
-  const rows = [...baseRows, ...endMarkers].sort(
-    (a, b) => (a._s - b._s) || ((a.isEnd ? 1 : 0) - (b.isEnd ? 1 : 0)),
+
+  const bySort = (a, b) => (a._s - b._s) || ((a.isEnd ? 1 : 0) - (b.isEnd ? 1 : 0)) || ((a.isBox ? 1 : 0) - (b.isBox ? 1 : 0))
+  top.sort(bySort)
+  groups.forEach(kids => kids.sort(bySort))
+
+  /* ---------- shared row rendering ---------- */
+
+  // The inner content of an item — identical whether it sits loose on the rail
+  // or inside a block's outline. This is what used to live inline in the <li>.
+  const itemBody = (item) => (
+    <div className={item.done ? 'opacity-50' : ''}>
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Check anything off right here. For events this is Sentinel's own
+            "wrapped up" flag — Google's copy is never touched. */}
+        <input
+          type="checkbox"
+          checked={item.done}
+          onChange={() =>
+            item.kind === 'event'
+              ? onToggleEventDone(metaOf(item))
+              : onToggleComplete(item.rawId)
+          }
+          aria-label={`Mark ${item.title} ${item.kind === 'event' ? 'wrapped up' : 'complete'}`}
+          className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer shrink-0"
+        />
+        <h3 className={`font-medium text-sm ${item.done ? 'line-through text-faint' : 'text-fg'}`}>
+          {item.title}
+        </h3>
+        {/* A real double-booking — a heads-up, not an error. */}
+        {item.overlaps && (
+          <span className="text-[10px] text-amber-400 border border-amber-500/40 bg-amber-500/10 rounded px-1.5 py-0.5 whitespace-nowrap">
+            overlaps
+          </span>
+        )}
+        {item.kind === 'task' && item.hasReminder && (
+          <span className="text-faint" title="Reminder on"><BellDot /></span>
+        )}
+        {item.subtasks.length > 0 && (
+          <span className="text-xs text-faint tabular-nums">
+            {item.subtasks.filter(s => s.done).length}/{item.subtasks.length}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 mt-1 text-xs text-faint">
+        <span className="tabular-nums">{item.time} – {endLabel(toMinutes(item.time), item.duration)}</span>
+        <span>·</span>
+        <span>{item.duration} min</span>
+        <span className="ml-1 px-1.5 py-0.5 rounded border border-line text-muted capitalize">
+          {item.kind}
+        </span>
+      </div>
+
+      {item.subtasks.length > 0 && (
+        <ul className="mt-2.5 space-y-1.5">
+          {item.subtasks.map(s => (
+            <li key={s.id} className="flex items-center gap-2 group">
+              <input
+                type="checkbox"
+                checked={s.done}
+                onChange={() =>
+                  item.kind === 'event'
+                    ? onToggleEventSubtask(metaOf(item), s.id)
+                    : onToggleSubtask(item.rawId, s.id)
+                }
+                className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer"
+              />
+              <span className={`text-xs ${s.done ? 'line-through text-faint' : 'text-muted'}`}>
+                {s.title}
+              </span>
+              {item.kind === 'event' && (
+                <button
+                  onClick={() => onRemoveEventSubtask(metaOf(item), s.id)}
+                  aria-label="Remove subtask"
+                  className="text-faint hover:text-fg opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-xs"
+                >
+                  ×
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Prep checklist on a calendar block — stored in Sentinel, never
+          written back to Google. */}
+      {item.kind === 'event' && (
+        addingFor === item.rawId ? (
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              autoFocus
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') submitSubtask(item)
+                if (e.key === 'Escape') { setDraft(''); setAddingFor(null) }
+              }}
+              placeholder="What needs doing in this block?"
+              className="input flex-1 py-1 text-xs"
+            />
+            <button
+              onClick={() => submitSubtask(item)}
+              className="text-xs px-2 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
+            >
+              Add
+            </button>
+            <button
+              onClick={() => { setDraft(''); setAddingFor(null) }}
+              className="text-xs text-faint hover:text-fg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => { setDraft(''); setAddingFor(item.rawId) }}
+            className="mt-2 text-xs text-faint hover:text-fg transition-colors"
+          >
+            + Add subtask
+          </button>
+        )
+      )}
+    </div>
+  )
+
+  // A loose item on the rail (with its rail dot).
+  const itemRow = (item) => (
+    <li key={item.id} className="relative pr-4 py-2.5 pl-6">
+      <span className="absolute -left-[4.75rem] top-3 w-16 text-right text-xs text-muted tabular-nums">
+        {item.time}
+      </span>
+      <span
+        className={`absolute -left-[5px] top-3.5 w-2.5 h-2.5 rounded-full ring-4 ring-surface ${
+          item.kind === 'event' ? 'bg-fg' : 'bg-surface2 border border-line2'
+        }`}
+      />
+      {itemBody(item)}
+    </li>
+  )
+
+  const tickRow = (t) => (
+    <li key={t.id} className="relative pr-4 py-2 pl-6">
+      <span className="absolute -left-[4.75rem] -top-1 w-16 text-right text-[10px] text-faint tabular-nums">
+        {t.label}
+      </span>
+      <span className="absolute -left-[2.5px] top-0 w-1.5 h-1.5 rounded-full bg-line" />
+    </li>
+  )
+
+  // Rows inside a block's outline box. The gutter time labels are pushed further
+  // left (the box has its own padding) so they line up with the loose rows.
+  const GUT = '-left-[calc(4.75rem+32px)]'
+  const boxItem = (item) => (
+    <div key={item.id} className="relative py-1.5">
+      <span className={`absolute ${GUT} top-1.5 w-16 text-right text-xs text-muted tabular-nums`}>
+        {item.time}
+      </span>
+      {itemBody(item)}
+    </div>
+  )
+  const boxTick = (t) => (
+    <div key={t.id} className="relative py-1">
+      <span className={`absolute ${GUT} -top-1 w-16 text-right text-[10px] text-faint tabular-nums`}>
+        {t.label}
+      </span>
+    </div>
+  )
+  const boxEnd = (e) => (
+    <div key={e.id} className="relative py-1">
+      <span className={`absolute ${GUT} top-0 w-16 text-right text-[10px] text-faint tabular-nums`}>
+        {e.label}
+      </span>
+      <span className="text-[10px] text-faint">{e.endTitle} ends</span>
+    </div>
+  )
+
+  const boxGroup = (node) => (
+    <li key={node.id} className="relative pr-4 py-1.5 pl-6 list-none">
+      <div className="border border-line2 rounded-xl px-3 py-1.5 divide-y divide-line/60">
+        {boxItem(node.block)}
+        {node.kids.map(k =>
+          k.isEnd ? boxEnd(k) : k.isTick ? boxTick(k) : boxItem(k),
+        )}
+      </div>
+    </li>
   )
 
   return (
@@ -244,170 +442,13 @@ export default function Timeline({
           </div>
         ) : (
           <>
-        <ol className="relative border-l border-line ml-[4.75rem] py-2">
-          {rows.map(item => item.isEnd ? (
-            /* Where a long block closes — the bottom of its nested bracket. */
-            <li key={item.id} className="relative pr-4 py-1.5 pl-6 ml-[18px] border-l border-line">
-              <span className="absolute -left-[calc(4.75rem+18px)] top-0 w-16 text-right text-[10px] text-faint tabular-nums">
-                {item.label}
-              </span>
-              <span className="absolute -left-[3px] top-1 w-1.5 h-1.5 rounded-full bg-line2" />
-              <span className="text-[10px] text-faint">{item.endTitle} ends</span>
-            </li>
-          ) : item.isTick ? (
-            <li
-              key={item.id}
-              className={`relative pr-4 py-2 ${
-                item.inside ? 'pl-6 ml-[18px] border-l border-line' : 'pl-6'
-              }`}
-            >
-              <span
-                className={`absolute -top-1 w-16 text-right text-[10px] text-faint tabular-nums ${
-                  item.inside ? '-left-[calc(4.75rem+18px)]' : '-left-[4.75rem]'
-                }`}
-              >
-                {item.label}
-              </span>
-              <span className="absolute -left-[2.5px] top-0 w-1.5 h-1.5 rounded-full bg-line" />
-            </li>
-          ) : (
-            <li
-              key={item.id}
-              className={`relative pr-4 py-2.5 ${
-                item.inside ? 'pl-6 ml-[18px] border-l border-line' : 'pl-6'
-              }`}
-            >
-              {/* time label, left of the rail — pushed out further for an
-                  indented (inside-a-block) row so it stays in the same gutter */}
-              <span
-                className={`absolute top-3 w-16 text-right text-xs text-muted tabular-nums ${
-                  item.inside ? '-left-[calc(4.75rem+18px)]' : '-left-[4.75rem]'
-                }`}
-              >
-                {item.time}
-              </span>
-              {/* node on the rail */}
-              <span
-                className={`absolute -left-[5px] top-3.5 w-2.5 h-2.5 rounded-full ring-4 ring-surface ${
-                  item.kind === 'event' ? 'bg-fg' : 'bg-surface2 border border-line2'
-                }`}
-              />
-              {/* block */}
-              <div className={item.done ? 'opacity-50' : ''}>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {/* Check anything off right here. For events this is Sentinel's
-                      own "wrapped up" flag — Google's copy is never touched. */}
-                  <input
-                    type="checkbox"
-                    checked={item.done}
-                    onChange={() =>
-                      item.kind === 'event'
-                        ? onToggleEventDone(metaOf(item))
-                        : onToggleComplete(item.rawId)
-                    }
-                    aria-label={`Mark ${item.title} ${item.kind === 'event' ? 'wrapped up' : 'complete'}`}
-                    className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer shrink-0"
-                  />
-                  <h3 className={`font-medium text-sm ${item.done ? 'line-through text-faint' : 'text-fg'}`}>
-                    {item.title}
-                  </h3>
-                  {/* Happens inside a longer block — the "during" cue. */}
-                  {item.insideTitle && (
-                    <span className="text-[10px] text-muted border border-line2 rounded px-1.5 py-0.5 whitespace-nowrap">
-                      during {item.insideTitle.length > 22 ? `${item.insideTitle.slice(0, 22)}…` : item.insideTitle}
-                    </span>
-                  )}
-                  {item.kind === 'task' && item.hasReminder && (
-                    <span className="text-faint" title="Reminder on"><BellDot /></span>
-                  )}
-                  {item.subtasks.length > 0 && (
-                    <span className="text-xs text-faint tabular-nums">
-                      {item.subtasks.filter(s => s.done).length}/{item.subtasks.length}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 mt-1 text-xs text-faint">
-                  <span className="tabular-nums">{item.time} – {endLabel(toMinutes(item.time), item.duration)}</span>
-                  <span>·</span>
-                  <span>{item.duration} min</span>
-                  <span className="ml-1 px-1.5 py-0.5 rounded border border-line text-muted capitalize">
-                    {item.kind}
-                  </span>
-                </div>
-
-                {item.subtasks.length > 0 && (
-                  <ul className="mt-2.5 space-y-1.5">
-                    {item.subtasks.map(s => (
-                      <li key={s.id} className="flex items-center gap-2 group">
-                        <input
-                          type="checkbox"
-                          checked={s.done}
-                          onChange={() =>
-                            item.kind === 'event'
-                              ? onToggleEventSubtask(metaOf(item), s.id)
-                              : onToggleSubtask(item.rawId, s.id)
-                          }
-                          className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer"
-                        />
-                        <span className={`text-xs ${s.done ? 'line-through text-faint' : 'text-muted'}`}>
-                          {s.title}
-                        </span>
-                        {item.kind === 'event' && (
-                          <button
-                            onClick={() => onRemoveEventSubtask(metaOf(item), s.id)}
-                            aria-label="Remove subtask"
-                            className="text-faint hover:text-fg opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-xs"
-                          >
-                            ×
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {/* Prep checklist on a calendar block — stored in Sentinel, never
-                    written back to Google. */}
-                {item.kind === 'event' && (
-                  addingFor === item.rawId ? (
-                    <div className="flex items-center gap-2 mt-2">
-                      <input
-                        autoFocus
-                        value={draft}
-                        onChange={e => setDraft(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') submitSubtask(item)
-                          if (e.key === 'Escape') { setDraft(''); setAddingFor(null) }
-                        }}
-                        placeholder="What needs doing in this block?"
-                        className="input flex-1 py-1 text-xs"
-                      />
-                      <button
-                        onClick={() => submitSubtask(item)}
-                        className="text-xs px-2 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
-                      >
-                        Add
-                      </button>
-                      <button
-                        onClick={() => { setDraft(''); setAddingFor(null) }}
-                        className="text-xs text-faint hover:text-fg transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => { setDraft(''); setAddingFor(item.rawId) }}
-                      className="mt-2 text-xs text-faint hover:text-fg transition-colors"
-                    >
-                      + Add subtask
-                    </button>
-                  )
-                )}
-              </div>
-            </li>
-          ))}
-        </ol>
+            <ol className="relative border-l border-line ml-[4.75rem] py-2">
+              {top.map(node =>
+                node.isBox ? boxGroup(node)
+                  : node.isTick ? tickRow(node)
+                    : itemRow(node),
+              )}
+            </ol>
             <button
               onClick={() => setAddingTask(true)}
               className="w-full text-left px-5 py-3 border-t border-line text-xs text-faint hover:text-fg hover:bg-surface2 transition-colors"
