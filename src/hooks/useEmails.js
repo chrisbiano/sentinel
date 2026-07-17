@@ -88,10 +88,17 @@ export default function useEmails() {
       const { data, error: fnError } = await supabase.functions.invoke('gmail-action', {
         body: { messageId, accountEmail, action },
       })
-      if (fnError) throw fnError
+      if (fnError) {
+        // "No one-click unsubscribe" comes back as a non-2xx, which supabase-js
+        // surfaces as an error and hides the body — read it to recover the soft
+        // signal so we open the sender's page instead of showing an error.
+        let body = null
+        try { body = await fnError.context?.json?.() } catch { /* not JSON */ }
+        if (body?.error === 'no_one_click') { setEmails(previous); return { oneClick: false } }
+        throw fnError
+      }
       if (data?.error) {
-        // Sender has no one-click endpoint — the UI opens their page instead,
-        // so this isn't a failure, just a different path.
+        // Same case, if the function ever returns it as a 200.
         if (data.error === 'no_one_click') { setEmails(previous); return { oneClick: false } }
         throw new Error(data.error)
       }

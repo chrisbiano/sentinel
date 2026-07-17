@@ -399,9 +399,9 @@ export default function Timeline({
             {!isToday && (
               <button
                 onClick={() => onChangeDate(new Date())}
-                className="text-xs font-medium text-muted hover:text-fg border border-line2 rounded-lg px-2 py-1 transition-colors"
+                className="text-xs font-medium text-muted hover:text-fg border border-line2 rounded-lg px-2 py-1 transition-colors whitespace-nowrap"
               >
-                Today
+                Jump to today
               </button>
             )}
             <button
