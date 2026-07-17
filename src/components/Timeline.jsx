@@ -152,24 +152,32 @@ export default function Timeline({
     ticks.push({ id: `tick-${h}`, isTick: true, _s: h * 60, label: formatMin(h * 60) })
   }
 
-  // Nest everything whose start falls inside a longer block — ruler marks and
-  // items alike — so the indent runs unbroken from the block's start to its
-  // end. Otherwise the block looks like it stops and restarts around a task
-  // that happens during it. Items also get a "during …" tag; marks just indent.
+  // Nest everything whose start falls strictly inside a longer block — ruler
+  // marks and items alike — so the indent runs unbroken through the block. A
+  // mark at a block's own start stays flush (it announces the block).
   const blocks = spans.filter(b => (b.duration || 0) > 0)
-  const rows = [...ticks, ...spans]
-    .sort((a, b) => a._s - b._s)
-    .map(r => {
-      let container = null
-      for (const b of blocks) {
-        if (b === r) continue
-        // Strictly after the block's start — a mark at the start of a block
-        // isn't "inside" it, it announces it.
-        const inside = b._s < r._s && r._s < b._e && (b.duration || 0) > (r.duration || 0)
-        if (inside && (!container || b.duration > container.duration)) container = b
-      }
-      return { ...r, inside: Boolean(container), insideTitle: container ? container.title : null }
-    })
+  const baseRows = [...ticks, ...spans].sort((a, b) => a._s - b._s).map(r => {
+    let container = null
+    for (const b of blocks) {
+      if (b === r) continue
+      const inside = b._s < r._s && r._s < b._e && (b.duration || 0) > (r.duration || 0)
+      if (inside && (!container || b.duration > container.duration)) container = b
+    }
+    return { ...r, inside: Boolean(container), insideTitle: container ? container.title : null, container }
+  })
+
+  // Each block that wraps a real item (or runs ≥2h) gets an end marker placed
+  // at its finish, IN TIME ORDER — so a long block's end shows on the gutter
+  // *after* its contents, closing the indent, instead of jumping in above them.
+  const withEnd = new Set()
+  baseRows.forEach(r => { if (r.container && !r.isTick) withEnd.add(r.container) })
+  blocks.forEach(b => { if (b.duration >= 120) withEnd.add(b) })
+  const endMarkers = [...withEnd].map(b => ({
+    id: `end-${b.id}`, isEnd: true, inside: true, _s: b._e, label: formatMin(b._e), endTitle: b.title,
+  }))
+  const rows = [...baseRows, ...endMarkers].sort(
+    (a, b) => (a._s - b._s) || ((a.isEnd ? 1 : 0) - (b.isEnd ? 1 : 0)),
+  )
 
   return (
     <section>
@@ -237,7 +245,16 @@ export default function Timeline({
         ) : (
           <>
         <ol className="relative border-l border-line ml-[4.75rem] py-2">
-          {rows.map(item => item.isTick ? (
+          {rows.map(item => item.isEnd ? (
+            /* Where a long block closes — the bottom of its nested bracket. */
+            <li key={item.id} className="relative pr-4 py-1.5 pl-6 ml-[18px] border-l border-line">
+              <span className="absolute -left-[calc(4.75rem+18px)] top-0 w-16 text-right text-[10px] text-faint tabular-nums">
+                {item.label}
+              </span>
+              <span className="absolute -left-[3px] top-1 w-1.5 h-1.5 rounded-full bg-line2" />
+              <span className="text-[10px] text-faint">{item.endTitle} ends</span>
+            </li>
+          ) : item.isTick ? (
             <li
               key={item.id}
               className={`relative pr-4 py-2 ${
@@ -269,18 +286,6 @@ export default function Timeline({
               >
                 {item.time}
               </span>
-              {/* End time on the gutter for real blocks (≥1h), so you can see
-                  when a long block lets out — not just when it begins. Short
-                  items skip it; start and end would be cramped and redundant. */}
-              {item.duration >= 60 && (
-                <span
-                  className={`absolute bottom-3 w-16 text-right text-[10px] text-faint tabular-nums ${
-                    item.inside ? '-left-[calc(4.75rem+18px)]' : '-left-[4.75rem]'
-                  }`}
-                >
-                  {formatMin(item._e)}
-                </span>
-              )}
               {/* node on the rail */}
               <span
                 className={`absolute -left-[5px] top-3.5 w-2.5 h-2.5 rounded-full ring-4 ring-surface ${
