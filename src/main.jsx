@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import AuthGate from './components/AuthGate.jsx'
+import { startUpdater } from './lib/updater.js'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -24,3 +25,7 @@ if ('serviceWorker' in navigator) {
     })
   })
 }
+
+// Reload the app when a newer build has shipped (mainly for the iOS PWA, which
+// doesn't re-fetch on resume). Kept out of the render path — see updater.js.
+startUpdater()
