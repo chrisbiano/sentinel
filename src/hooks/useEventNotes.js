@@ -108,13 +108,36 @@ export default function useEventNotes() {
     persist(event, { ...cur, done: !cur.done })
   }, [persist])
 
-  /* Notes made before we stored event context have no title/date, which makes
-     them unsearchable. Whenever we can see the real event, quietly fill it in. */
+  // The stable part of an event id — everything after the account prefix
+  // ("<calendar>:<googleEventId>"). Two ids for the same real event share this
+  // even if their account prefix differs (old internal-id vs new email format).
+  const suffixOf = (id) => String(id).split(':').slice(1).join(':')
+
+  /* Two jobs on load:
+     1. Recover subtasks orphaned by an account reconnect. The event id used to
+        start with the account's internal id, which changes on reconnect; it now
+        starts with the account email. An old note and the current event share
+        the same suffix, so adopt the orphan's content onto the current id. The
+        orphan is left in place (harmless, still searchable) — nothing is deleted.
+     2. Fill missing title/date on older notes so they stay searchable. */
   const backfillContext = useCallback((events) => {
+    const map = notesRef.current
     for (const e of events) {
-      const cur = notesRef.current[e.id]
-      const worthKeeping = cur && (cur.subtasks?.length > 0 || cur.done)
-      if (worthKeeping && (!cur.title || !cur.date)) {
+      const cur = map[e.id]
+      const curHasContent = cur && (cur.subtasks?.length > 0 || cur.done)
+
+      if (!curHasContent) {
+        const suffix = suffixOf(e.id)
+        const orphan = Object.entries(map).find(([oid, n]) =>
+          oid !== e.id && suffixOf(oid) === suffix && (n.subtasks?.length > 0 || n.done)
+        )
+        if (orphan) {
+          persist({ id: e.id, title: e.title, date: e.date, time: e.time }, orphan[1])
+          continue
+        }
+      }
+
+      if (curHasContent && (!cur.title || !cur.date)) {
         persist({ id: e.id, title: e.title, date: e.date, time: e.time }, cur)
       }
     }

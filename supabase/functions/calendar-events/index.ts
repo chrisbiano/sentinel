@@ -106,7 +106,10 @@ Deno.serve(async (req) => {
       for (const e of j.items ?? []) {
         if (e.status === 'cancelled') continue
         events.push({
-          id: `${acct.id}:${cal.id}:${e.id}`,
+          // Keyed by the account's EMAIL, not its internal id — email survives a
+          // disconnect/reconnect, so Sentinel-side subtasks stay attached instead
+          // of being orphaned when the account id is regenerated.
+          id: `${acct.email}:${cal.id}:${e.id}`,
           title: e.summary || '(no title)',
           start: e.start?.dateTime || e.start?.date || null,
           end: e.end?.dateTime || e.end?.date || null,
