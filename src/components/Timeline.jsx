@@ -225,7 +225,7 @@ export default function Timeline({
             heads-up to fold it into that block or move it. */}
         {item.overlaps && (
           <span className="text-[10px] text-amber-400 border border-amber-500/40 bg-amber-500/10 rounded px-1.5 py-0.5 whitespace-nowrap">
-            double-booked
+            overlap
           </span>
         )}
         {item.kind === 'task' && item.hasReminder && (
