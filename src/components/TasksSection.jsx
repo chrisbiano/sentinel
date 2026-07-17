@@ -62,15 +62,130 @@ function PlusIcon() {
 export default function TasksSection({ tasks, onToggleReminder, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, defaultDate }) {
   const [form, setForm] = useState(null) // null | 'new' | taskId
   const [confirmDelete, setConfirmDelete] = useState(null) // taskId of a repeating task
+  const [showCompleted, setShowCompleted] = useState(false)
 
   const closeForm = () => setForm(null)
+
+  // Checked-off tasks drop out of the active list into their own collapsed
+  // "Completed" group, so a done item never reads like a fresh standalone task.
+  const active = tasks.filter(t => !t.completed)
+  const completed = tasks.filter(t => t.completed)
+
+  const renderTask = (task) =>
+    form === task.id ? (
+      <TaskForm
+        key={task.id}
+        initial={task}
+        defaultDate={defaultDate}
+        onSave={(data) => { onUpdate(task.id, data); closeForm() }}
+        onCancel={closeForm}
+      />
+    ) : (
+      <div key={task.id} className={`card card-hover ${task.completed ? 'opacity-60' : ''}`}>
+        <div className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={task.completed}
+            onChange={() => onToggleComplete(task.id)}
+            className="mt-0.5 w-5 h-5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer"
+          />
+
+          <div className="flex-1 min-w-0">
+            <h3 className={`font-medium ${task.completed ? 'text-faint line-through' : 'text-fg'}`}>
+              {task.title}
+            </h3>
+            <div className="flex items-center gap-3 mt-2 text-sm text-muted">
+              {task.time ? (
+                <>
+                  <span className="flex items-center gap-1.5"><ClockIcon /> {task.time}</span>
+                  <span className="text-faint">{task.duration} min</span>
+                </>
+              ) : (
+                <span className="text-faint">Anytime</span>
+              )}
+              {task.recurrence && (
+                <span className="text-faint">↻ {recurrenceLabel(task.recurrence)}</span>
+              )}
+              {task.subtasks?.length > 0 && (
+                <span className="text-faint tabular-nums">
+                  {task.subtasks.filter(s => s.done).length}/{task.subtasks.length} subtasks
+                </span>
+              )}
+              {task.isUrgent && (
+                <span className="border border-line2 text-muted px-2 py-0.5 rounded-full text-xs font-medium">
+                  Urgent
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            {!task.completed && (
+              <button
+                onClick={() => onToggleReminder(task.id)}
+                aria-label={task.hasReminder ? 'Turn reminder off' : 'Turn reminder on'}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors text-sm border ${
+                  task.hasReminder
+                    ? 'bg-surface2 border-line2 text-fg'
+                    : 'bg-transparent border-line text-faint hover:text-muted'
+                }`}
+              >
+                <BellIcon off={!task.hasReminder} />
+                {task.hasReminder ? 'On' : 'Off'}
+              </button>
+            )}
+            <button
+              onClick={() => setForm(task.id)}
+              aria-label="Edit task"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-faint hover:text-fg hover:bg-surface2 transition-colors"
+            >
+              <EditIcon />
+            </button>
+            <button
+              onClick={() => task.seriesId ? setConfirmDelete(task.id) : onDelete(task.id)}
+              aria-label="Delete task"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-faint hover:text-fg hover:bg-surface2 transition-colors"
+            >
+              <TrashIcon />
+            </button>
+          </div>
+        </div>
+
+        {/* Repeating tasks: delete just today's, or stop the series here. */}
+        {confirmDelete === task.id && (
+          <div className="mt-3 pt-3 border-t border-line flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-muted">This task repeats — delete…</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { onDelete(task.id); setConfirmDelete(null) }}
+                className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg transition-colors"
+              >
+                Just this one
+              </button>
+              <button
+                onClick={() => { onDeleteSeries(task.seriesId, task.date); setConfirmDelete(null) }}
+                className="text-xs px-2.5 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
+              >
+                This & all future
+              </button>
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="text-xs text-faint hover:text-fg transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
 
   return (
     <section>
       <SectionHeader
         icon={<TaskIcon />}
         title="Today's tasks"
-        count={tasks.filter(t => !t.completed).length}
+        count={active.length}
         action={
           <button
             onClick={() => setForm('new')}
@@ -90,118 +205,30 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
           />
         )}
 
-        {tasks.map(task =>
-          form === task.id ? (
-            <TaskForm
-              key={task.id}
-              initial={task}
-              defaultDate={defaultDate}
-              onSave={(data) => { onUpdate(task.id, data); closeForm() }}
-              onCancel={closeForm}
-            />
-          ) : (
-            <div key={task.id} className={`card card-hover ${task.completed ? 'opacity-60' : ''}`}>
-              <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={task.completed}
-                  onChange={() => onToggleComplete(task.id)}
-                  className="mt-0.5 w-5 h-5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer"
-                />
-
-                <div className="flex-1 min-w-0">
-                  <h3 className={`font-medium ${task.completed ? 'text-faint line-through' : 'text-fg'}`}>
-                    {task.title}
-                  </h3>
-                  <div className="flex items-center gap-3 mt-2 text-sm text-muted">
-                    {task.time ? (
-                      <>
-                        <span className="flex items-center gap-1.5"><ClockIcon /> {task.time}</span>
-                        <span className="text-faint">{task.duration} min</span>
-                      </>
-                    ) : (
-                      <span className="text-faint">Anytime</span>
-                    )}
-                    {task.recurrence && (
-                      <span className="text-faint">↻ {recurrenceLabel(task.recurrence)}</span>
-                    )}
-                    {task.subtasks?.length > 0 && (
-                      <span className="text-faint tabular-nums">
-                        {task.subtasks.filter(s => s.done).length}/{task.subtasks.length} subtasks
-                      </span>
-                    )}
-                    {task.isUrgent && (
-                      <span className="border border-line2 text-muted px-2 py-0.5 rounded-full text-xs font-medium">
-                        Urgent
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => onToggleReminder(task.id)}
-                    aria-label={task.hasReminder ? 'Turn reminder off' : 'Turn reminder on'}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors text-sm border ${
-                      task.hasReminder
-                        ? 'bg-surface2 border-line2 text-fg'
-                        : 'bg-transparent border-line text-faint hover:text-muted'
-                    }`}
-                  >
-                    <BellIcon off={!task.hasReminder} />
-                    {task.hasReminder ? 'On' : 'Off'}
-                  </button>
-                  <button
-                    onClick={() => setForm(task.id)}
-                    aria-label="Edit task"
-                    className="w-8 h-8 flex items-center justify-center rounded-lg text-faint hover:text-fg hover:bg-surface2 transition-colors"
-                  >
-                    <EditIcon />
-                  </button>
-                  <button
-                    onClick={() => task.seriesId ? setConfirmDelete(task.id) : onDelete(task.id)}
-                    aria-label="Delete task"
-                    className="w-8 h-8 flex items-center justify-center rounded-lg text-faint hover:text-fg hover:bg-surface2 transition-colors"
-                  >
-                    <TrashIcon />
-                  </button>
-                </div>
-              </div>
-
-              {/* Repeating tasks: delete just today's, or stop the series here. */}
-              {confirmDelete === task.id && (
-                <div className="mt-3 pt-3 border-t border-line flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs text-muted">This task repeats — delete…</span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => { onDelete(task.id); setConfirmDelete(null) }}
-                      className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg transition-colors"
-                    >
-                      Just this one
-                    </button>
-                    <button
-                      onClick={() => { onDeleteSeries(task.seriesId, task.date); setConfirmDelete(null) }}
-                      className="text-xs px-2.5 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
-                    >
-                      This & all future
-                    </button>
-                    <button
-                      onClick={() => setConfirmDelete(null)}
-                      className="text-xs text-faint hover:text-fg transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )
-        )}
+        {active.map(renderTask)}
       </div>
 
-      {tasks.length === 0 && form !== 'new' && (
+      {active.length === 0 && completed.length === 0 && form !== 'new' && (
         <div className="card">
           <p className="text-muted">No tasks yet. Add one to start structuring your day.</p>
+        </div>
+      )}
+
+      {/* Done tasks live here, collapsed, so they don't clutter the active list. */}
+      {completed.length > 0 && (
+        <div className="mt-5">
+          <button
+            onClick={() => setShowCompleted(v => !v)}
+            className="flex items-center gap-1.5 text-xs font-medium text-faint hover:text-muted transition-colors"
+          >
+            <span className={`transition-transform ${showCompleted ? 'rotate-90' : ''}`}>›</span>
+            Completed ({completed.length})
+          </button>
+          {showCompleted && (
+            <div className="space-y-3 mt-3">
+              {completed.map(renderTask)}
+            </div>
+          )}
         </div>
       )}
     </section>
