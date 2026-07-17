@@ -102,6 +102,12 @@ export default function useEventNotes() {
     persist(event, { ...cur, subtasks: cur.subtasks.filter(s => s.id !== subId) })
   }, [persist])
 
+  // Replace the whole subtasks array — used for reordering (drag) and renaming.
+  const setSubtasks = useCallback((event, subtasks) => {
+    const cur = get(event.id)
+    persist(event, { ...cur, subtasks })
+  }, [persist])
+
   // "I'm wrapped up with this block" — Sentinel-side only.
   const toggleDone = useCallback((event) => {
     const cur = get(event.id)
@@ -143,5 +149,5 @@ export default function useEventNotes() {
     }
   }, [persist])
 
-  return { notes, loading, addSubtask, toggleSubtask, removeSubtask, toggleDone, backfillContext }
+  return { notes, loading, addSubtask, toggleSubtask, removeSubtask, setSubtasks, toggleDone, backfillContext }
 }

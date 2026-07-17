@@ -2,6 +2,41 @@ import { useState } from 'react'
 import SectionHeader from './SectionHeader'
 import TaskForm from './TaskForm'
 import ViewSwitcher from './ViewSwitcher'
+import SortableSubtasks from './SortableSubtasks'
+
+// A title you can rename by double-clicking (tasks only — event titles come
+// from Google and would be overwritten on the next sync).
+function EditableTitle({ title, done, editable, overlaps, onSave }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(title)
+  const save = () => {
+    const t = draft.trim()
+    if (t && t !== title) onSave(t)
+    setEditing(false)
+  }
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+        className="input py-0.5 text-sm font-medium flex-1 min-w-0"
+      />
+    )
+  }
+  const color = done ? 'line-through text-faint' : overlaps ? 'text-amber-400' : 'text-fg'
+  return (
+    <h3
+      onDoubleClick={() => { if (editable) { setDraft(title); setEditing(true) } }}
+      title={editable ? 'Double-click to edit' : undefined}
+      className={`font-medium text-sm ${color} ${editable && !done ? 'cursor-text' : ''}`}
+    >
+      {title}
+    </h3>
+  )
+}
 
 function TimelineIcon() {
   return (
@@ -60,11 +95,13 @@ export default function Timeline({
   onAddEventSubtask,
   onToggleEventSubtask,
   onRemoveEventSubtask,
+  onSetEventSubtasks,
   onToggleEventDone,
   selectedDate,
   onChangeDate,
   defaultDate,
   onAddTask,
+  onUpdateTask,
   onToggleComplete,
   view,
   onChangeView,
@@ -216,11 +253,13 @@ export default function Timeline({
           aria-label={`Mark ${item.title} ${item.kind === 'event' ? 'wrapped up' : 'complete'}`}
           className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer shrink-0"
         />
-        <h3 className={`font-medium text-sm ${
-          item.done ? 'line-through text-faint' : item.overlaps ? 'text-amber-400' : 'text-fg'
-        }`}>
-          {item.title}
-        </h3>
+        <EditableTitle
+          title={item.title}
+          done={item.done}
+          overlaps={item.overlaps}
+          editable={item.kind === 'task'}
+          onSave={(t) => onUpdateTask(item.rawId, { title: t })}
+        />
         {/* A separate item claiming time another item already owns — a
             heads-up to fold it into that block or move it. */}
         {item.overlaps && (
@@ -246,35 +285,29 @@ export default function Timeline({
         </span>
       </div>
 
+      {/* Drag the grip to reorder, double-click text to rename. Events also
+          remove; task subtasks are added/removed from the task's edit form. */}
       {item.subtasks.length > 0 && (
-        <ul className="mt-2.5 space-y-1.5">
-          {item.subtasks.map(s => (
-            <li key={s.id} className="flex items-center gap-2 group">
-              <input
-                type="checkbox"
-                checked={s.done}
-                onChange={() =>
-                  item.kind === 'event'
-                    ? onToggleEventSubtask(metaOf(item), s.id)
-                    : onToggleSubtask(item.rawId, s.id)
-                }
-                className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer"
-              />
-              <span className={`text-xs ${s.done ? 'line-through text-faint' : 'text-muted'}`}>
-                {s.title}
-              </span>
-              {item.kind === 'event' && (
-                <button
-                  onClick={() => onRemoveEventSubtask(metaOf(item), s.id)}
-                  aria-label="Remove subtask"
-                  className="text-faint hover:text-fg opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-xs"
-                >
-                  ×
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+        <SortableSubtasks
+          subtasks={item.subtasks}
+          onToggle={(id) =>
+            item.kind === 'event'
+              ? onToggleEventSubtask(metaOf(item), id)
+              : onToggleSubtask(item.rawId, id)
+          }
+          onRemove={item.kind === 'event' ? (id) => onRemoveEventSubtask(metaOf(item), id) : null}
+          onEdit={(id, title) => {
+            const next = item.subtasks.map(s => (s.id === id ? { ...s, title } : s))
+            item.kind === 'event'
+              ? onSetEventSubtasks(metaOf(item), next)
+              : onUpdateTask(item.rawId, { subtasks: next })
+          }}
+          onReorder={(next) =>
+            item.kind === 'event'
+              ? onSetEventSubtasks(metaOf(item), next)
+              : onUpdateTask(item.rawId, { subtasks: next })
+          }
+        />
       )}
 
       {/* Prep checklist on a calendar block — stored in Sentinel, never

@@ -120,6 +120,7 @@ export default function App() {
     addSubtask: addEventSubtask,
     toggleSubtask: toggleEventSubtask,
     removeSubtask: removeEventSubtask,
+    setSubtasks: setEventSubtasks,
     toggleDone: toggleEventDone,
     backfillContext,
   } = useEventNotes()
@@ -253,7 +254,9 @@ export default function App() {
             onAddEventSubtask={addEventSubtask}
             onToggleEventSubtask={toggleEventSubtask}
             onRemoveEventSubtask={removeEventSubtask}
+            onSetEventSubtasks={setEventSubtasks}
             onToggleEventDone={toggleEventDone}
+            onUpdateTask={updateTask}
             selectedDate={selectedDate}
             onChangeDate={setSelectedDate}
             defaultDate={selectedISO}
