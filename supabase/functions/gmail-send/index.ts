@@ -146,6 +146,48 @@ async function sendAsIdentity(token: string, accountEmail: string) {
   }
 }
 
+function b64urlToText(data: string) {
+  const bin = atob(data.replace(/-/g, '+').replace(/_/g, '/'))
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return new TextDecoder('utf-8').decode(bytes)
+}
+
+// The original's full renderable body + headers, for quoting into a forward.
+async function originalFull(token: string, gmailId: string) {
+  const r = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${gmailId}?format=full`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!r.ok) return null
+  const m = await r.json()
+  const h = m.payload?.headers ?? []
+
+  let html = ''
+  let plain = ''
+  const walk = (p: any) => {
+    if (!p) return
+    const d = p.body?.data
+    if (d) {
+      if (p.mimeType === 'text/html') html += b64urlToText(d)
+      else if (p.mimeType === 'text/plain') plain += b64urlToText(d)
+    }
+    for (const c of p.parts ?? []) walk(c)
+  }
+  walk(m.payload)
+  const bodyHtml = html
+    ? html.replace(/<script[\s\S]*?<\/script>/gi, '')
+    : `<div style="white-space:pre-wrap">${escapeHtml(plain)}</div>`
+
+  return {
+    subject: findHeader(h, 'Subject'),
+    from: findHeader(h, 'From'),
+    to: findHeader(h, 'To'),
+    date: findHeader(h, 'Date'),
+    bodyHtml,
+  }
+}
+
 /* ---------- handler ---------- */
 
 Deno.serve(async (req) => {
@@ -159,12 +201,12 @@ Deno.serve(async (req) => {
   let body: any = {}
   try { body = await req.json() } catch { /* none */ }
   const { messageId, accountEmail, mode } = body
-  if (!accountEmail || !['preview', 'send', 'signature'].includes(mode)) {
-    return json({ error: 'Expected { accountEmail, mode: preview|send|signature }' }, 400)
+  if (!accountEmail || !['preview', 'send', 'signature', 'forward'].includes(mode)) {
+    return json({ error: 'Expected { accountEmail, mode: preview|send|signature|forward }' }, 400)
   }
-  // preview/send answer a specific message; signature just needs the account.
-  if ((mode === 'preview' || mode === 'send') && !messageId) {
-    return json({ error: 'messageId is required for preview/send' }, 400)
+  // signature just needs the account; every other mode answers a message.
+  if (mode !== 'signature' && !messageId) {
+    return json({ error: 'messageId is required for this mode' }, 400)
   }
 
   // The account is the ownership check for every mode (scoped to this user).
@@ -189,7 +231,7 @@ Deno.serve(async (req) => {
     })
   }
 
-  // preview/send: confirm the message is one of his, scoped through his user id.
+  // preview/send/forward: confirm the message is one of his.
   const { data: row } = await admin
     .from('email_verdicts')
     .select('message_id, account_email')
@@ -199,9 +241,64 @@ Deno.serve(async (req) => {
     .single()
   if (!row) return json({ error: 'No such message' }, 404)
 
+  const identity = await sendAsIdentity(token, accountEmail)
+  const fromHeader = identity.displayName
+    ? `${encodeHeader(identity.displayName)} <${accountEmail}>`
+    : accountEmail
+
+  // Forward: quote the whole original and pass it on to a new recipient. It's a
+  // fresh thread (no In-Reply-To) and is NOT marked handled — forwarding an
+  // email doesn't mean you've dealt with it.
+  if (mode === 'forward') {
+    const { to, text } = body
+    if (!to || typeof text !== 'string') {
+      return json({ error: 'Expected { to, text } to forward' }, 400)
+    }
+    const orig = await originalFull(token, messageId)
+    if (!orig) return json({ error: 'Could not read the original message' }, 502)
+
+    const typed = escapeHtml(text).replace(/\n/g, '<br>')
+    const fwdSubject = /^fwd:/i.test(orig.subject) ? orig.subject : `Fwd: ${orig.subject}`
+    const forwarded =
+      '<br><br><div style="color:#777">---------- Forwarded message ---------<br>' +
+      `From: ${escapeHtml(orig.from)}<br>` +
+      (orig.date ? `Date: ${escapeHtml(orig.date)}<br>` : '') +
+      `Subject: ${escapeHtml(orig.subject)}<br>` +
+      (orig.to ? `To: ${escapeHtml(orig.to)}<br>` : '') +
+      '</div><br>'
+    const html =
+      `<div dir="ltr">${typed}</div>` +
+      (identity.signature ? `<br><br>${identity.signature}` : '') +
+      forwarded + orig.bodyHtml
+
+    const lines = [
+      `From: ${fromHeader}`,
+      `To: ${to}`,
+      `Subject: ${encodeHeader(fwdSubject)}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/html; charset="UTF-8"',
+      'Content-Transfer-Encoding: base64',
+    ]
+    const mime = lines.join('\r\n') + '\r\n\r\n' + b64Body(html)
+    const res = await fetch(
+      'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw: b64url(mime) }),   // new thread
+      },
+    )
+    if (!res.ok) {
+      const detail = res.status === 403
+        ? 'no send permission — reconnect this account to grant it'
+        : `Gmail refused the forward (HTTP ${res.status})`
+      return json({ error: detail }, 502)
+    }
+    return json({ ok: true })
+  }
+
   const ctx = await originalContext(token, messageId)
   if (!ctx) return json({ error: 'Could not read the original message' }, 502)
-  const identity = await sendAsIdentity(token, accountEmail)
 
   // Preview: hand the modal everything it needs to show what will go out.
   if (mode === 'preview') {
@@ -225,9 +322,6 @@ Deno.serve(async (req) => {
     `<div dir="ltr">${typed}</div>` +
     (identity.signature ? `<br><br>${identity.signature}` : '')
 
-  const fromHeader = identity.displayName
-    ? `${encodeHeader(identity.displayName)} <${accountEmail}>`
-    : accountEmail
   const references = [ctx.references, ctx.messageId].filter(Boolean).join(' ')
 
   const headerLines = [

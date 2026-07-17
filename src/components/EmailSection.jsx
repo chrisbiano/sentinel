@@ -2,6 +2,7 @@ import { useState } from 'react'
 import SectionHeader from './SectionHeader'
 import ComposeModal from './ComposeModal'
 import ReadModal from './ReadModal'
+import ForwardModal from './ForwardModal'
 
 function MailIcon() {
   return (
@@ -44,7 +45,7 @@ function StarIcon({ filled }) {
   )
 }
 
-function EmailRow({ email, onAct, onReply, onRead, onReclassify, onFlag, onAddToTasks, busy }) {
+function EmailRow({ email, onAct, onReply, onRead, onForward, onReclassify, onFlag, onAddToTasks, busy }) {
   const [confirming, setConfirming] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const moveTargets = BUCKETS.filter(b => b.key !== email.action)
@@ -140,6 +141,12 @@ function EmailRow({ email, onAct, onReply, onRead, onReclassify, onFlag, onAddTo
 
         {/* Row 2 — deal-with-it-later on the left; organize/remove on the right. */}
         <div className="flex items-center gap-2 flex-wrap mt-2">
+          <button
+            onClick={() => onForward(email)}
+            className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors"
+          >
+            Forward
+          </button>
           {/* "Answer this later" — drops a don't-forget task into Today. Once
               added it greys out for good, so it can't spawn a duplicate. */}
           <button
@@ -229,6 +236,7 @@ export default function EmailSection({
   const [busyKey, setBusyKey] = useState(null)
   const [replyTo, setReplyTo] = useState(null)   // email being composed, or null
   const [reading, setReading] = useState(null)   // email being read, or null
+  const [forwarding, setForwarding] = useState(null) // email being forwarded, or null
 
   const counts = Object.fromEntries(
     BUCKETS.map(b => [b.key, emails.filter(e => e.action === b.key).length])
@@ -327,6 +335,7 @@ export default function EmailSection({
               onAct={act}
               onReply={setReplyTo}
               onRead={setReading}
+              onForward={setForwarding}
               onReclassify={onReclassify}
               onFlag={onFlag}
               onAddToTasks={onAddToTasks}
@@ -341,6 +350,14 @@ export default function EmailSection({
           email={reading}
           onClose={() => setReading(null)}
           onReply={setReplyTo}
+        />
+      )}
+
+      {forwarding && (
+        <ForwardModal
+          email={forwarding}
+          onClose={() => setForwarding(null)}
+          onSent={() => setForwarding(null)}
         />
       )}
 
