@@ -1,8 +1,63 @@
-import { useState } from 'react'
+import { useState, useRef, useLayoutEffect } from 'react'
 import SectionHeader from './SectionHeader'
 import TaskForm from './TaskForm'
 import ViewSwitcher from './ViewSwitcher'
 import SortableSubtasks from './SortableSubtasks'
+
+// Which whole-hour marks to show down a block, given its REAL measured height H.
+// Marks sit at their true time-proportional position, so we keep them in the
+// clear middle band (away from the start label at the top and the end label at
+// the bottom, which live at the box's pixels, not at their own time-%) and thin
+// them if the band can't hold every hour. Always on the hour, so they read like
+// the rail's ticks; empty/short blocks get few or none.
+const MARK_PAD = 40   // px kept clear at top and bottom for the start/end labels
+const MARK_GAP = 24   // min px between adjacent marks
+function hourMarksFor(b, H) {
+  if (!H) return []
+  const endMin = b._s + b.duration
+  const hours = []
+  for (let m = (Math.floor(b._s / 60) + 1) * 60; m < endMin; m += 60) hours.push(m)
+  const inBand = hours.filter(m => {
+    const px = ((m - b._s) / b.duration) * H
+    return px >= MARK_PAD && px <= H - MARK_PAD
+  })
+  if (inBand.length === 0) return []
+  const maxFit = Math.max(1, Math.floor((H - 2 * MARK_PAD) / MARK_GAP) + 1)
+  const step = inBand.length > maxFit ? Math.ceil(inBand.length / maxFit) : 1
+  return inBand
+    .filter((_, i) => i % step === 0)
+    .map(m => ({ pct: ((m - b._s) / b.duration) * 100, label: formatMinShort(m) }))
+}
+
+// Interior hour marks for a block. Measures the block's own <li> (its positioned
+// offsetParent) so the marks are placed against the real height, not an estimate.
+function HourMarks({ block, gutClass }) {
+  const anchor = useRef(null)
+  const [h, setH] = useState(0)
+  useLayoutEffect(() => {
+    const li = anchor.current?.offsetParent
+    if (!li) return
+    const measure = () => setH(li.clientHeight)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(li)
+    return () => ro.disconnect()
+  }, [])
+  return (
+    <>
+      <span ref={anchor} className="absolute left-0 top-0 w-0 h-0" aria-hidden="true" />
+      {hourMarksFor(block, h).map((m, i) => (
+        <span
+          key={i}
+          style={{ top: `${m.pct}%` }}
+          className={`absolute ${gutClass} -translate-y-1/2 w-16 text-right text-[10px] text-faint tabular-nums`}
+        >
+          {m.label}
+        </span>
+      ))}
+    </>
+  )
+}
 
 // A title you can rename by double-clicking (tasks only — event titles come
 // from Google and would be overwritten on the next sync).
@@ -460,25 +515,6 @@ export default function Timeline({
     </div>
   )
 
-  // Interior hour marks down a block's side — a "clock feel", since subtasks are
-  // timeless. Want ~one per hour, BUT a long block with little inside is short
-  // (a 5h event with no subtasks is only ~120px tall), and packing 4 marks into
-  // it overruns the gutter. So cap the count to what the block's height can hold
-  // (~28px of room per label, reserving the start + end), then spread that many
-  // evenly. Tall blocks (lots of subtasks) still get the full one-per-hour set.
-  const interiorMarks = (b) => {
-    const perHour = Math.max(0, Math.round((b.duration || 0) / 60) - 1)
-    if (perHour === 0) return []
-    const nSub = b.subtasks?.length || 0
-    const estHeight = 96 + nSub * 24 + (b.kind === 'event' ? 26 : 0) // header + rows + add-subtask
-    const fits = Math.max(0, Math.floor(estHeight / 28) - 2)
-    const k = Math.min(perHour, fits)
-    return Array.from({ length: k }, (_, i) => ({
-      pct: ((i + 1) / (k + 1)) * 100,
-      label: formatMinShort(b._s + Math.round((b.duration * (i + 1)) / (k + 1))),
-    }))
-  }
-
   const boxGroup = (node) => {
     const b = node.block
     const nowKid = node.kids.find(k => k.isNow)
@@ -499,17 +535,9 @@ export default function Timeline({
     }
     return (
       <li key={node.id} className="relative pr-4 py-1.5 pl-6 list-none">
-        {/* evenly-spaced hour marks down the gutter, scaled to the block's length
-            — omitted on the active block so they never crowd the "now" label */}
-        {!nowKid && interiorMarks(b).map((m, i) => (
-          <span
-            key={i}
-            style={{ top: `${m.pct}%` }}
-            className={`absolute ${GUT_ROW} -translate-y-1/2 w-16 text-right text-[10px] text-faint tabular-nums`}
-          >
-            {m.label}
-          </span>
-        ))}
+        {/* on-the-hour marks down the gutter, measured against the block's real
+            height — omitted on the active block so they never crowd "now" */}
+        {!nowKid && <HourMarks block={b} gutClass={GUT_ROW} />}
         {/* "now" — the current time, the largest label in the gutter, at its true
             proportional height in the block */}
         {nowKid && (
