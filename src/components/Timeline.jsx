@@ -421,7 +421,7 @@ export default function Timeline({
   // the gutter, anchored to the rail with a filled dot.
   const nowRow = (n) => (
     <li key={n.id} className="relative pr-4 py-2 pl-6">
-      <span className="absolute -left-[4.75rem] top-1/2 -translate-y-1/2 w-16 text-right text-base font-bold text-fg tabular-nums">
+      <span className="absolute -left-[4.75rem] top-1/2 -translate-y-1/2 w-16 text-right text-sm font-bold text-fg tabular-nums">
         {formatMinShort(n._s)}
       </span>
       <span className="absolute -left-[6px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-fg ring-4 ring-surface" />
@@ -436,19 +436,26 @@ export default function Timeline({
   // need 36px less offset (the li's pl-6 + the outline's px-3) to right-align with
   // them. This also keeps the big "now" label from overrunning the card's edge.
   const GUT_ROW = '-left-[calc(4.75rem-4px)]'
-  const boxItem = (item) => (
+  // hideTime drops just the gutter time — used on the active block when "now"
+  // sits close enough to the start/end that the two labels would collide (the
+  // time is still shown in the block's header range).
+  const boxItem = (item, hideTime) => (
     <div key={item.id} className="relative py-1.5">
-      <span className={`absolute ${GUT} top-1.5 w-16 text-right text-xs text-muted tabular-nums`}>
-        {item.time}
-      </span>
+      {!hideTime && (
+        <span className={`absolute ${GUT} top-1.5 w-16 text-right text-xs text-muted tabular-nums`}>
+          {item.time}
+        </span>
+      )}
       {itemBody(item)}
     </div>
   )
-  const boxEnd = (e) => (
+  const boxEnd = (e, hideTime) => (
     <div key={e.id} className="relative py-1.5">
-      <span className={`absolute ${GUT} top-1 w-16 text-right text-[10px] text-faint tabular-nums`}>
-        {e.label}
-      </span>
+      {!hideTime && (
+        <span className={`absolute ${GUT} top-1 w-16 text-right text-[10px] text-faint tabular-nums`}>
+          {e.label}
+        </span>
+      )}
       <span className="text-[10px] text-faint">{e.endTitle} ends</span>
     </div>
   )
@@ -468,13 +475,25 @@ export default function Timeline({
     const b = node.block
     const nowKid = node.kids.find(k => k.isNow)
     const flowKids = node.kids.filter(k => !k.isNow)
-    // Where "now" sits as a fraction of the block's span — the same time-to-height
-    // mapping the interior marks use, so the gutter reads in order top to bottom.
-    const nowPct = nowKid ? ((nowKid._s - b._s) / (b.duration || 1)) * 100 : null
+
+    // Place "now" at its true fraction of the block's span, but keep it clear of
+    // the other gutter labels so nothing ever overlaps:
+    //  - the interior hour marks are hidden entirely on the active block;
+    //  - if "now" lands in the top third it takes the start's spot (hide start),
+    //    in the bottom third it takes the end's spot (hide end); in the middle
+    //    both stay and "now" sits safely between them.
+    let nowPct = null, hideStart = false, hideEnd = false
+    if (nowKid) {
+      const raw = ((nowKid._s - b._s) / (b.duration || 1)) * 100
+      if (raw < 33) { hideStart = true; nowPct = Math.max(6, raw) }
+      else if (raw > 67) { hideEnd = true; nowPct = Math.min(94, raw) }
+      else nowPct = raw
+    }
     return (
       <li key={node.id} className="relative pr-4 py-1.5 pl-6 list-none">
-        {/* evenly-spaced hour marks down the gutter, scaled to the block's length */}
-        {interiorMarks(b).map((m, i) => (
+        {/* evenly-spaced hour marks down the gutter, scaled to the block's length
+            — omitted on the active block so they never crowd the "now" label */}
+        {!nowKid && interiorMarks(b).map((m, i) => (
           <span
             key={i}
             style={{ top: `${m.pct}%` }}
@@ -483,19 +502,19 @@ export default function Timeline({
             {m.label}
           </span>
         ))}
-        {/* "now" — the current time, called out as the boldest, largest label in
-            the gutter, placed at its true proportional height in the block. */}
+        {/* "now" — the current time, the largest label in the gutter, at its true
+            proportional height in the block */}
         {nowKid && (
           <span
             style={{ top: `${nowPct}%` }}
-            className={`absolute ${GUT_ROW} -translate-y-1/2 w-16 text-right text-base font-bold text-fg tabular-nums z-10`}
+            className={`absolute ${GUT_ROW} -translate-y-1/2 w-16 text-right text-sm font-bold text-fg tabular-nums z-10`}
           >
             {formatMinShort(nowKid._s)}
           </span>
         )}
         <div className="border border-line2 rounded-xl px-3 py-1.5 divide-y divide-line/60">
-          {boxItem(b)}
-          {flowKids.map(k => k.isEnd ? boxEnd(k) : boxItem(k))}
+          {boxItem(b, hideStart)}
+          {flowKids.map(k => k.isEnd ? boxEnd(k, hideEnd) : boxItem(k))}
         </div>
       </li>
     )
