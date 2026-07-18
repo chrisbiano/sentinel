@@ -417,21 +417,25 @@ export default function Timeline({
     </li>
   )
 
-  // "You are here." A bright line across the rail at the current time, with the
-  // time called out in the gutter so the present moment stands out from the day.
+  // "You are here." The current time, called out as the boldest, largest label in
+  // the gutter, anchored to the rail with a filled dot.
   const nowRow = (n) => (
-    <li key={n.id} className="relative pr-4 py-1 pl-6">
-      <span className="absolute -left-[4.75rem] top-1/2 -translate-y-1/2 w-16 text-right text-[10px] font-semibold text-fg tabular-nums">
-        {n.label}
+    <li key={n.id} className="relative pr-4 py-2 pl-6">
+      <span className="absolute -left-[4.75rem] top-1/2 -translate-y-1/2 w-16 text-right text-base font-bold text-fg tabular-nums">
+        {formatMinShort(n._s)}
       </span>
       <span className="absolute -left-[6px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-fg ring-4 ring-surface" />
-      <span className="block h-0.5 rounded-full bg-fg/70" />
     </li>
   )
 
   // Rows inside a block's outline box. The gutter time labels are pushed further
   // left (the box has its own padding) so they line up with the loose rows.
   const GUT = '-left-[calc(4.75rem+32px)]'
+  // The interior hour marks and the "now" label sit on the box's <li> (they span
+  // its full height), one nesting level up from the start/end labels — so they
+  // need 36px less offset (the li's pl-6 + the outline's px-3) to right-align with
+  // them. This also keeps the big "now" label from overrunning the card's edge.
+  const GUT_ROW = '-left-[calc(4.75rem-4px)]'
   const boxItem = (item) => (
     <div key={item.id} className="relative py-1.5">
       <span className={`absolute ${GUT} top-1.5 w-16 text-right text-xs text-muted tabular-nums`}>
@@ -474,25 +478,20 @@ export default function Timeline({
           <span
             key={i}
             style={{ top: `${m.pct}%` }}
-            className={`absolute ${GUT} -translate-y-1/2 w-16 text-right text-[10px] text-faint tabular-nums`}
+            className={`absolute ${GUT_ROW} -translate-y-1/2 w-16 text-right text-[10px] text-faint tabular-nums`}
           >
             {m.label}
           </span>
         ))}
-        {/* "now" as a line across the block at its true proportional position */}
+        {/* "now" — the current time, called out as the boldest, largest label in
+            the gutter, placed at its true proportional height in the block. */}
         {nowKid && (
-          <>
-            <span
-              style={{ top: `${nowPct}%` }}
-              className={`absolute ${GUT} -translate-y-1/2 w-16 text-right text-[10px] font-semibold text-fg tabular-nums z-10`}
-            >
-              {formatMinShort(nowKid._s)}
-            </span>
-            <span
-              style={{ top: `${nowPct}%` }}
-              className="absolute left-6 right-4 -translate-y-1/2 h-0.5 rounded-full bg-fg/80 z-10"
-            />
-          </>
+          <span
+            style={{ top: `${nowPct}%` }}
+            className={`absolute ${GUT_ROW} -translate-y-1/2 w-16 text-right text-base font-bold text-fg tabular-nums z-10`}
+          >
+            {formatMinShort(nowKid._s)}
+          </span>
         )}
         <div className="border border-line2 rounded-xl px-3 py-1.5 divide-y divide-line/60">
           {boxItem(b)}
