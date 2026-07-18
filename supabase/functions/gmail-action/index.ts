@@ -100,10 +100,22 @@ Deno.serve(async (req) => {
     .eq('user_id', u.user.id)
     .eq('email', row.account_email)
     .single()
-  if (!acct) return json({ error: `${row.account_email} is no longer connected` }, 409)
+  if (!acct) {
+    return json(
+      { error: 'account_not_connected', account: row.account_email,
+        message: `${row.account_email} is no longer connected. Reconnect it in Settings to act on its mail.` },
+      409,
+    )
+  }
 
   const token = await freshAccessToken(admin, acct)
-  if (!token) return json({ error: `Couldn't refresh access for ${acct.email}` }, 502)
+  if (!token) {
+    return json(
+      { error: 'account_needs_reconnect', account: acct.email,
+        message: `${acct.email} needs to be reconnected in Settings — its access has expired.` },
+      502,
+    )
+  }
   const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
   const base = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`
 

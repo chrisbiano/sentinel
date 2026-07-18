@@ -14,6 +14,14 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
 // bounded — a loop that can't finish should stop, not bill forever.
 const MAX_PASSES = 32
 
+// supabase-js collapses any non-2xx into a generic "Edge Function returned a
+// non-2xx status code" and hides the body. Read the function's own JSON payload
+// so we can show what actually happened (e.g. "that account is no longer
+// connected") instead of the opaque code.
+async function fnErrorBody(fnError) {
+  try { return await fnError?.context?.json?.() } catch { return null }
+}
+
 export default function useEmails() {
   const [emails, setEmails] = useState([])
   const [loading, setLoading] = useState(isSupabaseConfigured)
@@ -92,15 +100,20 @@ export default function useEmails() {
         // "No one-click unsubscribe" comes back as a non-2xx, which supabase-js
         // surfaces as an error and hides the body — read it to recover the soft
         // signal so we open the sender's page instead of showing an error.
-        let body = null
-        try { body = await fnError.context?.json?.() } catch { /* not JSON */ }
+        const body = await fnErrorBody(fnError)
         if (body?.error === 'no_one_click') { setEmails(previous); return { oneClick: false } }
-        throw fnError
+        // Otherwise prefer the function's human message (e.g. account not
+        // connected) over the opaque "non-2xx status code".
+        setEmails(previous)
+        setError(body?.message || body?.error || fnError.message || `Could not ${action} that message`)
+        return { ok: false }
       }
       if (data?.error) {
         // Same case, if the function ever returns it as a 200.
         if (data.error === 'no_one_click') { setEmails(previous); return { oneClick: false } }
-        throw new Error(data.error)
+        setEmails(previous)
+        setError(data.message || data.error)
+        return { ok: false }
       }
       // Reversible actions get a few-second Undo. Sent/unsubscribe don't — those
       // can't be truly taken back, so no misleading offer.
@@ -132,7 +145,8 @@ export default function useEmails() {
       body: { messageId: u.email.message_id, accountEmail: u.email.account_email, action: reverse },
     })
     if (fnError || data?.error) {
-      setError((data && data.error) || fnError?.message || "Couldn't undo that")
+      const body = fnError ? await fnErrorBody(fnError) : null
+      setError(body?.message || body?.error || (data && (data.message || data.error)) || fnError?.message || "Couldn't undo that")
     }
   }, [undoable])
 
@@ -204,8 +218,9 @@ export default function useEmails() {
       },
     })
     if (fnError || data?.error) {
+      const body = fnError ? await fnErrorBody(fnError) : null
       setEmails(previous)
-      setError((data && data.error) || fnError?.message || "Couldn't flag that email")
+      setError(body?.message || body?.error || (data && (data.message || data.error)) || fnError?.message || "Couldn't flag that email")
     }
   }, [emails])
 
