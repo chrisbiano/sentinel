@@ -4,52 +4,62 @@ import TaskForm from './TaskForm'
 import ViewSwitcher from './ViewSwitcher'
 import SortableSubtasks from './SortableSubtasks'
 
-// Which whole-hour marks to show down a block, given its REAL measured height H.
-// Marks sit at their true time-proportional position, so we keep them in the
-// clear middle band (away from the start label at the top and the end label at
-// the bottom, which live at the box's pixels, not at their own time-%) and thin
-// them if the band can't hold every hour. Always on the hour, so they read like
-// the rail's ticks; empty/short blocks get few or none.
-const MARK_PAD = 40   // px kept clear at top and bottom for the start/end labels
-const MARK_GAP = 24   // min px between adjacent marks
-function hourMarksFor(b, H) {
-  if (!H) return []
+// Whole-hour marks to show down a block, positioned between the *measured* pixel
+// positions of the start (sY) and end (eY) gutter labels — NOT by percent of the
+// box height. The start/end labels are pinned to their content rows (the title
+// and the "ends" line), which aren't at the box's true 0%/100%, so anchoring the
+// interior marks to those same two points is what makes the spacing read right
+// (a 2-hour gap looks twice a 1-hour gap). Marks stay on real clock hours, keep
+// clear of the start/end labels, and thin to fit. Short blocks show few or none.
+const MARK_CLEAR = 22   // px kept clear of the start and end labels
+const MARK_GAP = 22     // min px between adjacent marks
+function hourMarksBetween(b, sY, eY) {
+  const span = eY - sY
+  if (span <= 0) return []
   const endMin = b._s + b.duration
-  const hours = []
-  for (let m = (Math.floor(b._s / 60) + 1) * 60; m < endMin; m += 60) hours.push(m)
-  const inBand = hours.filter(m => {
-    const px = ((m - b._s) / b.duration) * H
-    return px >= MARK_PAD && px <= H - MARK_PAD
-  })
+  const inBand = []
+  for (let m = (Math.floor(b._s / 60) + 1) * 60; m < endMin; m += 60) {
+    const y = sY + ((m - b._s) / b.duration) * span
+    if (y - sY >= MARK_CLEAR && eY - y >= MARK_CLEAR) inBand.push({ m, y })
+  }
   if (inBand.length === 0) return []
-  const maxFit = Math.max(1, Math.floor((H - 2 * MARK_PAD) / MARK_GAP) + 1)
+  const maxFit = Math.max(1, Math.floor((span - 2 * MARK_CLEAR) / MARK_GAP) + 1)
   const step = inBand.length > maxFit ? Math.ceil(inBand.length / maxFit) : 1
   return inBand
     .filter((_, i) => i % step === 0)
-    .map(m => ({ pct: ((m - b._s) / b.duration) * 100, label: formatMinShort(m) }))
+    .map(o => ({ y: o.y, label: formatMinShort(o.m) }))
 }
 
-// Interior hour marks for a block. Measures the block's own <li> (its positioned
-// offsetParent) so the marks are placed against the real height, not an estimate.
+// Interior hour marks for a block. Measures the block's own <li> and the pixel
+// positions of its start/end gutter labels (tagged data-gutter), so the marks
+// line up proportionally with them rather than against an estimate or raw height.
 function HourMarks({ block, gutClass }) {
   const anchor = useRef(null)
-  const [h, setH] = useState(0)
+  const [span, setSpan] = useState(null)   // { sY, eY } label-center offsets in the li
   useLayoutEffect(() => {
     const li = anchor.current?.offsetParent
     if (!li) return
-    const measure = () => setH(li.clientHeight)
+    const measure = () => {
+      const s = li.querySelector('[data-gutter="start"]')
+      const e = li.querySelector('[data-gutter="end"]')
+      if (!s || !e) { setSpan(null); return }
+      const liTop = li.getBoundingClientRect().top
+      const cy = (el) => el.getBoundingClientRect().top + el.offsetHeight / 2 - liTop
+      setSpan({ sY: cy(s), eY: cy(e) })
+    }
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(li)
     return () => ro.disconnect()
   }, [])
+  const marks = span ? hourMarksBetween(block, span.sY, span.eY) : []
   return (
     <>
       <span ref={anchor} className="absolute left-0 top-0 w-0 h-0" aria-hidden="true" />
-      {hourMarksFor(block, h).map((m, i) => (
+      {marks.map((m, i) => (
         <span
           key={i}
-          style={{ top: `${m.pct}%` }}
+          style={{ top: `${m.y}px` }}
           className={`absolute ${gutClass} -translate-y-1/2 w-16 text-right text-[10px] text-faint tabular-nums`}
         >
           {m.label}
@@ -494,10 +504,10 @@ export default function Timeline({
   // hideTime drops just the gutter time — used on the active block when "now"
   // sits close enough to the start/end that the two labels would collide (the
   // time is still shown in the block's header range).
-  const boxItem = (item, hideTime) => (
+  const boxItem = (item, hideTime, gutter) => (
     <div key={item.id} className="relative py-1.5">
       {!hideTime && (
-        <span className={`absolute ${GUT} top-1.5 w-16 text-right text-xs text-muted tabular-nums`}>
+        <span data-gutter={gutter} className={`absolute ${GUT} top-1.5 w-16 text-right text-xs text-muted tabular-nums`}>
           {item.time}
         </span>
       )}
@@ -507,7 +517,7 @@ export default function Timeline({
   const boxEnd = (e, hideTime) => (
     <div key={e.id} className="relative py-1.5">
       {!hideTime && (
-        <span className={`absolute ${GUT} top-1 w-16 text-right text-[10px] text-faint tabular-nums`}>
+        <span data-gutter="end" className={`absolute ${GUT} top-1 w-16 text-right text-[10px] text-faint tabular-nums`}>
           {e.label}
         </span>
       )}
@@ -549,7 +559,7 @@ export default function Timeline({
           </span>
         )}
         <div className="border border-line2 rounded-xl px-3 py-1.5 divide-y divide-line/60">
-          {boxItem(b, hideStart)}
+          {boxItem(b, hideStart, 'start')}
           {flowKids.map(k => k.isEnd ? boxEnd(k, hideEnd) : boxItem(k))}
         </div>
       </li>
