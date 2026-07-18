@@ -41,6 +41,15 @@ function EditIcon() {
   )
 }
 
+function CopyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+      <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  )
+}
+
 function TrashIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -59,7 +68,7 @@ function PlusIcon() {
   )
 }
 
-export default function TasksSection({ tasks, onToggleReminder, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, defaultDate }) {
+export default function TasksSection({ tasks, onToggleReminder, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, defaultDate }) {
   const [form, setForm] = useState(null) // null | 'new' | taskId
   const [confirmDelete, setConfirmDelete] = useState(null) // taskId of a repeating task
   const [showCompleted, setShowCompleted] = useState(false)
@@ -132,6 +141,16 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
               >
                 <BellIcon off={!task.hasReminder} />
                 {task.hasReminder ? 'On' : 'Off'}
+              </button>
+            )}
+            {onDuplicate && (
+              <button
+                onClick={() => onDuplicate(task)}
+                aria-label="Duplicate task"
+                title="Duplicate"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-faint hover:text-fg hover:bg-surface2 transition-colors"
+              >
+                <CopyIcon />
               </button>
             )}
             <button

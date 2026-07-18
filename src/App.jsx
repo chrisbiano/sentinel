@@ -27,6 +27,7 @@ export default function App() {
     updateTask,
     deleteTask,
     deleteSeries,
+    duplicateTask,
     toggleReminder,
     toggleComplete,
     toggleSubtask,
@@ -303,6 +304,7 @@ export default function App() {
               onUpdate={updateTask}
               onDelete={deleteTask}
               onDeleteSeries={deleteSeries}
+              onDuplicate={duplicateTask}
               defaultDate={selectedISO}
             />
           </div>

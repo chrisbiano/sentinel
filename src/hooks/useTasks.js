@@ -124,6 +124,20 @@ export default function useTasks() {
     }
   }, [])
 
+  // Make a fresh copy of a task on the same day: same title/time/duration/
+  // reminder and a clean (unchecked) copy of its subtasks. Deliberately starts
+  // uncompleted and drops any recurrence/series link — a duplicate is a new
+  // one-off, not a member of the original's series.
+  const duplicateTask = useCallback((task) => {
+    const newSubId = () => (crypto?.randomUUID ? crypto.randomUUID() : `s${Date.now()}${Math.random().toString(36).slice(2, 6)}`)
+    const { id, seriesId, recurrence, completed, subtasks, ...rest } = task
+    return addTask({
+      ...rest,
+      completed: false,
+      subtasks: (subtasks || []).map(s => ({ id: newSubId(), title: s.title, done: false })),
+    })
+  }, [addTask])
+
   // Stop a repeating task: remove this occurrence and everything after it.
   const deleteSeries = useCallback((seriesId, fromDate) => {
     setTasks(prev => prev.filter(t => !(t.seriesId === seriesId && t.date >= fromDate)))
@@ -168,7 +182,7 @@ export default function useTasks() {
 
   return {
     tasks, loading, error, clearError: () => setError(null),
-    addTask, updateTask, deleteTask, deleteSeries,
+    addTask, updateTask, deleteTask, deleteSeries, duplicateTask,
     toggleReminder, toggleComplete, toggleSubtask,
   }
 }
