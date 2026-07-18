@@ -81,23 +81,23 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
         onCancel={closeForm}
       />
     ) : (
-      <div key={task.id} className={`card card-hover ${task.completed ? 'opacity-60' : ''}`}>
-        <div className="flex items-start gap-3">
+      <div key={task.id} className={`card card-hover p-3 ${task.completed ? 'opacity-60' : ''}`}>
+        <div className="flex items-start gap-2.5">
           <input
             type="checkbox"
             checked={task.completed}
             onChange={() => onToggleComplete(task.id)}
-            className="mt-0.5 w-5 h-5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer"
+            className="mt-0.5 w-4 h-4 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer shrink-0"
           />
 
           <div className="flex-1 min-w-0">
-            <h3 className={`font-medium ${task.completed ? 'text-faint line-through' : 'text-fg'}`}>
+            <h3 className={`font-medium text-sm leading-snug ${task.completed ? 'text-faint line-through' : 'text-fg'}`}>
               {task.title}
             </h3>
-            <div className="flex items-center gap-3 mt-2 text-sm text-muted">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1 text-xs text-muted">
               {task.time ? (
                 <>
-                  <span className="flex items-center gap-1.5"><ClockIcon /> {task.time}</span>
+                  <span className="flex items-center gap-1"><ClockIcon /> {task.time}</span>
                   <span className="text-faint">{task.duration} min</span>
                 </>
               ) : (
@@ -112,19 +112,19 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
                 </span>
               )}
               {task.isUrgent && (
-                <span className="border border-line2 text-muted px-2 py-0.5 rounded-full text-xs font-medium">
+                <span className="border border-line2 text-muted px-1.5 py-0.5 rounded-full text-[10px] font-medium">
                   Urgent
                 </span>
               )}
             </div>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-0.5 shrink-0">
             {!task.completed && (
               <button
                 onClick={() => onToggleReminder(task.id)}
                 aria-label={task.hasReminder ? 'Turn reminder off' : 'Turn reminder on'}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors text-sm border ${
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg font-medium transition-colors text-xs border ${
                   task.hasReminder
                     ? 'bg-surface2 border-line2 text-fg'
                     : 'bg-transparent border-line text-faint hover:text-muted'
@@ -137,14 +137,14 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
             <button
               onClick={() => setForm(task.id)}
               aria-label="Edit task"
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-faint hover:text-fg hover:bg-surface2 transition-colors"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-faint hover:text-fg hover:bg-surface2 transition-colors"
             >
               <EditIcon />
             </button>
             <button
               onClick={() => task.seriesId ? setConfirmDelete(task.id) : onDelete(task.id)}
               aria-label="Delete task"
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-faint hover:text-fg hover:bg-surface2 transition-colors"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-faint hover:text-fg hover:bg-surface2 transition-colors"
             >
               <TrashIcon />
             </button>
@@ -196,7 +196,7 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
         }
       />
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {form === 'new' && (
           <TaskForm
             defaultDate={defaultDate}
@@ -225,7 +225,7 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
             Completed ({completed.length})
           </button>
           {showCompleted && (
-            <div className="space-y-3 mt-3">
+            <div className="space-y-2 mt-3">
               {completed.map(renderTask)}
             </div>
           )}

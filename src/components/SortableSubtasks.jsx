@@ -17,8 +17,8 @@ function GripIcon() {
   )
 }
 
-// One subtask: grip handle to drag, checkbox to toggle, double-click the text
-// to rename, × to remove (events only).
+// One subtask: grip handle to drag, checkbox to toggle, click the text to
+// rename (a 3-line box, easier to read/edit long titles), × to remove (events only).
 function Row({ s, onToggle, onRemove, onEdit }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: s.id })
   const [editing, setEditing] = useState(false)
@@ -37,12 +37,12 @@ function Row({ s, onToggle, onRemove, onEdit }) {
   }
 
   return (
-    <li ref={setNodeRef} style={style} className="flex items-center gap-1.5 group">
+    <li ref={setNodeRef} style={style} className={`flex gap-1.5 group ${editing ? 'items-start' : 'items-center'}`}>
       <button
         {...attributes}
         {...listeners}
         aria-label="Drag to reorder"
-        className="text-faint hover:text-muted cursor-grab active:cursor-grabbing touch-none shrink-0"
+        className={`text-faint hover:text-muted cursor-grab active:cursor-grabbing touch-none shrink-0 ${editing ? 'mt-1.5' : ''}`}
       >
         <GripIcon />
       </button>
@@ -50,23 +50,23 @@ function Row({ s, onToggle, onRemove, onEdit }) {
         type="checkbox"
         checked={s.done}
         onChange={() => onToggle(s.id)}
-        className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer shrink-0"
+        className={`w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0 cursor-pointer shrink-0 ${editing ? 'mt-1.5' : ''}`}
       />
       {editing ? (
-        <input
+        <textarea
           autoFocus
+          rows={3}
           value={draft}
           onChange={e => setDraft(e.target.value)}
           onBlur={save}
           onKeyDown={e => {
-            if (e.key === 'Enter') save()
+            // Enter saves (these are one-line titles); Shift+Enter for a newline.
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save() }
             if (e.key === 'Escape') setEditing(false)
           }}
-          // flex-1 + min-w-0 + w-0 lets the field shrink to the column instead of
-          // running off the right edge of the phone; size=1 kills the browser's
-          // ~20-char intrinsic minimum width.
-          size={1}
-          className="input flex-1 min-w-0 w-0 py-0.5 text-xs"
+          // min-w-0 + w-0 lets the box shrink to the column instead of running
+          // off the right edge of the phone; the 3 rows give room to read.
+          className="input flex-1 min-w-0 w-0 py-1 text-xs resize-none leading-snug"
         />
       ) : (
         <span

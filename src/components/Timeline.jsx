@@ -16,14 +16,17 @@ function EditableTitle({ title, done, editable, overlaps, onSave }) {
   }
   if (editing) {
     return (
-      <input
+      <textarea
         autoFocus
+        rows={3}
         value={draft}
         onChange={e => setDraft(e.target.value)}
         onBlur={save}
-        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-        size={1}
-        className="input py-0.5 text-sm font-medium flex-1 min-w-0 w-0"
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save() }
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        className="input py-1 text-sm font-medium flex-1 min-w-0 w-0 resize-none leading-snug"
       />
     )
   }
