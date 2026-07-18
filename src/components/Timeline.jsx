@@ -460,14 +460,22 @@ export default function Timeline({
     </div>
   )
 
-  // Roughly one hour mark per hour of the block, spread evenly down its side
-  // (subtasks are timeless, so this is a clock feel, not an exact placement):
-  // a 1h block gets just start+end, a 2h block one mark between, a 4h block three.
+  // Interior hour marks down a block's side — a "clock feel", since subtasks are
+  // timeless. Want ~one per hour, BUT a long block with little inside is short
+  // (a 5h event with no subtasks is only ~120px tall), and packing 4 marks into
+  // it overruns the gutter. So cap the count to what the block's height can hold
+  // (~28px of room per label, reserving the start + end), then spread that many
+  // evenly. Tall blocks (lots of subtasks) still get the full one-per-hour set.
   const interiorMarks = (b) => {
-    const n = Math.max(0, Math.round((b.duration || 0) / 60) - 1)
-    return Array.from({ length: n }, (_, i) => ({
-      pct: ((i + 1) / (n + 1)) * 100,
-      label: formatMinShort(b._s + Math.round((b.duration * (i + 1)) / (n + 1))),
+    const perHour = Math.max(0, Math.round((b.duration || 0) / 60) - 1)
+    if (perHour === 0) return []
+    const nSub = b.subtasks?.length || 0
+    const estHeight = 96 + nSub * 24 + (b.kind === 'event' ? 26 : 0) // header + rows + add-subtask
+    const fits = Math.max(0, Math.floor(estHeight / 28) - 2)
+    const k = Math.min(perHour, fits)
+    return Array.from({ length: k }, (_, i) => ({
+      pct: ((i + 1) / (k + 1)) * 100,
+      label: formatMinShort(b._s + Math.round((b.duration * (i + 1)) / (k + 1))),
     }))
   }
 
@@ -526,7 +534,7 @@ export default function Timeline({
         icon={<TimelineIcon />}
         title={isToday ? "Today's schedule" : dayLabel}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <ViewSwitcher value={view} onChange={onChangeView} />
             <div className="flex items-center gap-1">
             <button

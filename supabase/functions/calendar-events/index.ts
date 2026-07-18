@@ -73,10 +73,14 @@ Deno.serve(async (req) => {
     .eq('user_id', u.user.id)
     .eq('provider', 'google')
 
-  const events = []
-  for (const acct of accounts ?? []) {
+  // Fetch every account in parallel, and every calendar within an account in
+  // parallel too — the old account-by-account, calendar-by-calendar serial walk
+  // meant six mailboxes' worth of round-trips stacked up to 3–4s before anything
+  // showed. Each account still refreshes its token first (needed before any
+  // read), but the accounts no longer wait on each other.
+  const perAccount = await Promise.all((accounts ?? []).map(async (acct) => {
     const token = await freshAccessToken(admin, acct)
-    if (!token) continue
+    if (!token) return []
     const auth = { Authorization: `Bearer ${token}` }
 
     // Every calendar this account can read — "Blocks", "Personal", shared ones, etc.
@@ -84,12 +88,12 @@ Deno.serve(async (req) => {
       'https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader',
       { headers: auth },
     )
-    if (!calRes.ok) continue
+    if (!calRes.ok) return []
     const calJson = await calRes.json()
     // `selected: false` = hidden in the Google Calendar UI, so skip it.
-    const calendars = (calJson.items ?? []).filter(c => c.selected !== false)
+    const calendars = (calJson.items ?? []).filter((c: any) => c.selected !== false)
 
-    for (const cal of calendars) {
+    const perCal = await Promise.all(calendars.map(async (cal: any) => {
       const params = new URLSearchParams({
         timeMin, timeMax,
         singleEvents: 'true',   // expand recurring events
@@ -100,12 +104,12 @@ Deno.serve(async (req) => {
         `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?${params}`,
         { headers: auth },
       )
-      if (!r.ok) continue
+      if (!r.ok) return []
       const j = await r.json()
 
-      for (const e of j.items ?? []) {
-        if (e.status === 'cancelled') continue
-        events.push({
+      return (j.items ?? [])
+        .filter((e: any) => e.status !== 'cancelled')
+        .map((e: any) => ({
           // Keyed by the account's EMAIL, not its internal id — email survives a
           // disconnect/reconnect, so Sentinel-side subtasks stay attached instead
           // of being orphaned when the account id is regenerated.
@@ -116,11 +120,12 @@ Deno.serve(async (req) => {
           allDay: Boolean(e.start?.date && !e.start?.dateTime),
           account: acct.email,
           calendar: cal.summary,
-        })
-      }
-    }
-  }
+        }))
+    }))
+    return perCal.flat()
+  }))
 
+  const events = perAccount.flat()
   events.sort((a, b) => String(a.start).localeCompare(String(b.start)))
   return new Response(JSON.stringify({ events }), {
     headers: { ...cors, 'Content-Type': 'application/json' },
