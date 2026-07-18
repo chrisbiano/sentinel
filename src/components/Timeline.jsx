@@ -448,14 +448,6 @@ export default function Timeline({
       <span className="text-[10px] text-faint">{e.endTitle} ends</span>
     </div>
   )
-  const boxNow = (n) => (
-    <div key={n.id} className="relative py-1">
-      <span className={`absolute ${GUT} top-1/2 -translate-y-1/2 w-16 text-right text-[10px] font-semibold text-fg tabular-nums`}>
-        {n.label}
-      </span>
-      <span className="block h-0.5 rounded-full bg-fg/70" />
-    </div>
-  )
 
   // Roughly one hour mark per hour of the block, spread evenly down its side
   // (subtasks are timeless, so this is a clock feel, not an exact placement):
@@ -468,26 +460,47 @@ export default function Timeline({
     }))
   }
 
-  const boxGroup = (node) => (
-    <li key={node.id} className="relative pr-4 py-1.5 pl-6 list-none">
-      {/* evenly-spaced hour marks down the gutter, scaled to the block's length */}
-      {interiorMarks(node.block).map((m, i) => (
-        <span
-          key={i}
-          style={{ top: `${m.pct}%` }}
-          className={`absolute ${GUT} -translate-y-1/2 w-16 text-right text-[10px] text-faint tabular-nums`}
-        >
-          {m.label}
-        </span>
-      ))}
-      <div className="border border-line2 rounded-xl px-3 py-1.5 divide-y divide-line/60">
-        {boxItem(node.block)}
-        {node.kids.map(k =>
-          k.isNow ? boxNow(k) : k.isEnd ? boxEnd(k) : boxItem(k),
+  const boxGroup = (node) => {
+    const b = node.block
+    const nowKid = node.kids.find(k => k.isNow)
+    const flowKids = node.kids.filter(k => !k.isNow)
+    // Where "now" sits as a fraction of the block's span — the same time-to-height
+    // mapping the interior marks use, so the gutter reads in order top to bottom.
+    const nowPct = nowKid ? ((nowKid._s - b._s) / (b.duration || 1)) * 100 : null
+    return (
+      <li key={node.id} className="relative pr-4 py-1.5 pl-6 list-none">
+        {/* evenly-spaced hour marks down the gutter, scaled to the block's length */}
+        {interiorMarks(b).map((m, i) => (
+          <span
+            key={i}
+            style={{ top: `${m.pct}%` }}
+            className={`absolute ${GUT} -translate-y-1/2 w-16 text-right text-[10px] text-faint tabular-nums`}
+          >
+            {m.label}
+          </span>
+        ))}
+        {/* "now" as a line across the block at its true proportional position */}
+        {nowKid && (
+          <>
+            <span
+              style={{ top: `${nowPct}%` }}
+              className={`absolute ${GUT} -translate-y-1/2 w-16 text-right text-[10px] font-semibold text-fg tabular-nums z-10`}
+            >
+              {formatMinShort(nowKid._s)}
+            </span>
+            <span
+              style={{ top: `${nowPct}%` }}
+              className="absolute left-6 right-4 -translate-y-1/2 h-0.5 rounded-full bg-fg/80 z-10"
+            />
+          </>
         )}
-      </div>
-    </li>
-  )
+        <div className="border border-line2 rounded-xl px-3 py-1.5 divide-y divide-line/60">
+          {boxItem(b)}
+          {flowKids.map(k => k.isEnd ? boxEnd(k) : boxItem(k))}
+        </div>
+      </li>
+    )
+  }
 
   return (
     <section>
