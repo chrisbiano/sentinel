@@ -222,7 +222,15 @@ export default function Timeline({
   for (const r of [...ticks, ...spans]) {
     if (!r.isTick && boxBlocks.includes(r)) continue   // a box's own header, added below
     const owner = ownerOf(r)
-    const row = r.isTick ? r : { ...r, overlaps: conflicts.has(r), insideBox: Boolean(owner) }
+    // An hour tick that lands inside a block just clutters the block's bottom —
+    // the block already shows its own start (top) and end (bottom), and its
+    // subtasks are timeless, so there's nothing to line the hour up against.
+    // Drop it; keep only the ticks out on the open rail, where they space evenly.
+    if (r.isTick) {
+      if (!owner) top.push(r)
+      continue
+    }
+    const row = { ...r, overlaps: conflicts.has(r), insideBox: Boolean(owner) }
     if (owner) groups.get(owner).push(row)
     else top.push(row)
   }
@@ -371,11 +379,11 @@ export default function Timeline({
   )
 
   const tickRow = (t) => (
-    <li key={t.id} className="relative pr-4 py-2 pl-6">
-      <span className="absolute -left-[4.75rem] -top-1 w-16 text-right text-[10px] text-faint tabular-nums">
+    <li key={t.id} className="relative pr-4 py-2.5 pl-6">
+      <span className="absolute -left-[4.75rem] top-2 w-16 text-right text-[10px] text-faint tabular-nums">
         {t.label}
       </span>
-      <span className="absolute -left-[2.5px] top-0 w-1.5 h-1.5 rounded-full bg-line" />
+      <span className="absolute -left-[2.5px] top-3 w-1.5 h-1.5 rounded-full bg-line" />
     </li>
   )
 
@@ -390,16 +398,9 @@ export default function Timeline({
       {itemBody(item)}
     </div>
   )
-  const boxTick = (t) => (
-    <div key={t.id} className="relative py-1">
-      <span className={`absolute ${GUT} -top-1 w-16 text-right text-[10px] text-faint tabular-nums`}>
-        {t.label}
-      </span>
-    </div>
-  )
   const boxEnd = (e) => (
-    <div key={e.id} className="relative py-1">
-      <span className={`absolute ${GUT} top-0 w-16 text-right text-[10px] text-faint tabular-nums`}>
+    <div key={e.id} className="relative py-1.5">
+      <span className={`absolute ${GUT} top-1 w-16 text-right text-[10px] text-faint tabular-nums`}>
         {e.label}
       </span>
       <span className="text-[10px] text-faint">{e.endTitle} ends</span>
@@ -411,7 +412,7 @@ export default function Timeline({
       <div className="border border-line2 rounded-xl px-3 py-1.5 divide-y divide-line/60">
         {boxItem(node.block)}
         {node.kids.map(k =>
-          k.isEnd ? boxEnd(k) : k.isTick ? boxTick(k) : boxItem(k),
+          k.isEnd ? boxEnd(k) : boxItem(k),
         )}
       </div>
     </li>
