@@ -87,6 +87,15 @@ function formatMin(total) {
   return `${h12}:${mm} ${ampm}`
 }
 
+// Meridiem-less time ("10:30") for the tight interior gutter of an event box,
+// where the AM/PM is already established by the block's start and end labels.
+function formatMinShort(total) {
+  const h24 = Math.floor(total / 60) % 24
+  const mm = String(Math.round(total % 60)).padStart(2, '0')
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12
+  return `${h12}:${mm}`
+}
+
 const endLabel = (startMin, duration) => formatMin(startMin + duration)
 
 export default function Timeline({
@@ -217,17 +226,24 @@ export default function Timeline({
       : (b._s < r._s && r._e <= b._e && b.duration > r.duration),
   )
 
+  // Times the schedule already prints next to something (a block's start/end, or
+  // a loose item's start). A rail hour tick at the same minute would just double
+  // the label — e.g. an event ending 5:00 PM next to the 5 PM ruler tick — so
+  // those ticks are dropped.
+  const labeledTimes = new Set()
+  boxBlocks.forEach(b => { labeledTimes.add(b._s); labeledTimes.add(b._e) })
+  spans.filter(s => !boxBlocks.includes(s) && !ownerOf(s)).forEach(s => labeledTimes.add(s._s))
+
   const groups = new Map(boxBlocks.map(b => [b, []]))
   const top = []
   for (const r of [...ticks, ...spans]) {
     if (!r.isTick && boxBlocks.includes(r)) continue   // a box's own header, added below
     const owner = ownerOf(r)
-    // An hour tick that lands inside a block just clutters the block's bottom —
-    // the block already shows its own start (top) and end (bottom), and its
-    // subtasks are timeless, so there's nothing to line the hour up against.
-    // Drop it; keep only the ticks out on the open rail, where they space evenly.
+    // Hour ticks inside a block are handled by the block itself (its start, end,
+    // and evenly-spread interior marks). On the open rail, keep a tick only if no
+    // real item already labels that minute.
     if (r.isTick) {
-      if (!owner) top.push(r)
+      if (!owner && !labeledTimes.has(r._s)) top.push(r)
       continue
     }
     const row = { ...r, overlaps: conflicts.has(r), insideBox: Boolean(owner) }
@@ -240,6 +256,20 @@ export default function Timeline({
   boxBlocks.forEach(b => top.push({
     isBox: true, id: `box-${b.id}`, _s: b._s, block: { ...b, overlaps: conflicts.has(b) }, kids: groups.get(b),
   }))
+
+  // A "you are here" marker, only on today and only within the day's frame, slots
+  // into the flow by time. If the current moment is inside an event, it drops into
+  // that block so the line reads as "you're in the middle of this."
+  if (isToday) {
+    const d = new Date()
+    const nowMin = d.getHours() * 60 + d.getMinutes()
+    if (nowMin >= startMinAll && nowMin <= endMinAll) {
+      const nowNode = { id: 'now', isNow: true, _s: nowMin, label: formatMin(nowMin) }
+      const host = boxBlocks.find(b => b._s <= nowMin && nowMin <= b._e)
+      if (host) groups.get(host).push(nowNode)
+      else top.push(nowNode)
+    }
+  }
 
   const bySort = (a, b) => (a._s - b._s) || ((a.isEnd ? 1 : 0) - (b.isEnd ? 1 : 0)) || ((a.isBox ? 1 : 0) - (b.isBox ? 1 : 0))
   top.sort(bySort)
@@ -387,6 +417,18 @@ export default function Timeline({
     </li>
   )
 
+  // "You are here." A bright line across the rail at the current time, with the
+  // time called out in the gutter so the present moment stands out from the day.
+  const nowRow = (n) => (
+    <li key={n.id} className="relative pr-4 py-1 pl-6">
+      <span className="absolute -left-[4.75rem] top-1/2 -translate-y-1/2 w-16 text-right text-[10px] font-semibold text-fg tabular-nums">
+        {n.label}
+      </span>
+      <span className="absolute -left-[6px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-fg ring-4 ring-surface" />
+      <span className="block h-0.5 rounded-full bg-fg/70" />
+    </li>
+  )
+
   // Rows inside a block's outline box. The gutter time labels are pushed further
   // left (the box has its own padding) so they line up with the loose rows.
   const GUT = '-left-[calc(4.75rem+32px)]'
@@ -406,13 +448,42 @@ export default function Timeline({
       <span className="text-[10px] text-faint">{e.endTitle} ends</span>
     </div>
   )
+  const boxNow = (n) => (
+    <div key={n.id} className="relative py-1">
+      <span className={`absolute ${GUT} top-1/2 -translate-y-1/2 w-16 text-right text-[10px] font-semibold text-fg tabular-nums`}>
+        {n.label}
+      </span>
+      <span className="block h-0.5 rounded-full bg-fg/70" />
+    </div>
+  )
+
+  // Roughly one hour mark per hour of the block, spread evenly down its side
+  // (subtasks are timeless, so this is a clock feel, not an exact placement):
+  // a 1h block gets just start+end, a 2h block one mark between, a 4h block three.
+  const interiorMarks = (b) => {
+    const n = Math.max(0, Math.round((b.duration || 0) / 60) - 1)
+    return Array.from({ length: n }, (_, i) => ({
+      pct: ((i + 1) / (n + 1)) * 100,
+      label: formatMinShort(b._s + Math.round((b.duration * (i + 1)) / (n + 1))),
+    }))
+  }
 
   const boxGroup = (node) => (
     <li key={node.id} className="relative pr-4 py-1.5 pl-6 list-none">
+      {/* evenly-spaced hour marks down the gutter, scaled to the block's length */}
+      {interiorMarks(node.block).map((m, i) => (
+        <span
+          key={i}
+          style={{ top: `${m.pct}%` }}
+          className={`absolute ${GUT} -translate-y-1/2 w-16 text-right text-[10px] text-faint tabular-nums`}
+        >
+          {m.label}
+        </span>
+      ))}
       <div className="border border-line2 rounded-xl px-3 py-1.5 divide-y divide-line/60">
         {boxItem(node.block)}
         {node.kids.map(k =>
-          k.isEnd ? boxEnd(k) : boxItem(k),
+          k.isNow ? boxNow(k) : k.isEnd ? boxEnd(k) : boxItem(k),
         )}
       </div>
     </li>
@@ -486,8 +557,9 @@ export default function Timeline({
             <ol className="relative border-l border-line ml-[4.75rem] py-2">
               {top.map(node =>
                 node.isBox ? boxGroup(node)
-                  : node.isTick ? tickRow(node)
-                    : itemRow(node),
+                  : node.isNow ? nowRow(node)
+                    : node.isTick ? tickRow(node)
+                      : itemRow(node),
               )}
             </ol>
             <button
