@@ -124,15 +124,17 @@ export default function useTasks() {
     }
   }, [])
 
-  // Make a fresh copy of a task on the same day: same title/time/duration/
-  // reminder and a clean (unchecked) copy of its subtasks. Deliberately starts
-  // uncompleted and drops any recurrence/series link — a duplicate is a new
-  // one-off, not a member of the original's series.
-  const duplicateTask = useCallback((task) => {
+  // Make a fresh copy of a task: same title/time/duration/reminder and a clean
+  // (unchecked) copy of its subtasks. Deliberately starts uncompleted and drops
+  // any recurrence/series link — a duplicate is a new one-off, not a member of
+  // the original's series. Pass `date` (YYYY-MM-DD) to drop the copy on another
+  // day (e.g. reuse a block on the next shoot day); omit to keep the same day.
+  const duplicateTask = useCallback((task, date) => {
     const newSubId = () => (crypto?.randomUUID ? crypto.randomUUID() : `s${Date.now()}${Math.random().toString(36).slice(2, 6)}`)
     const { id, seriesId, recurrence, completed, subtasks, ...rest } = task
     return addTask({
       ...rest,
+      ...(date !== undefined ? { date } : {}),
       completed: false,
       subtasks: (subtasks || []).map(s => ({ id: newSubId(), title: s.title, done: false })),
     })

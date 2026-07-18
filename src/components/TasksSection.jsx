@@ -3,6 +3,21 @@ import SectionHeader from './SectionHeader'
 import TaskForm from './TaskForm'
 import { recurrenceLabel } from '../lib/recurrence'
 
+// Local-day ISO (YYYY-MM-DD), offset by `days`. Uses local time so "tomorrow"
+// is tomorrow in Chris's zone, not UTC's.
+const isoPlus = (days = 0, from = new Date()) => {
+  const d = new Date(from)
+  d.setDate(d.getDate() + days)
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
+  return d.toISOString().slice(0, 10)
+}
+const prettyDate = (iso) => {
+  if (!iso) return 'no date'
+  return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric',
+  })
+}
+
 function TaskIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -71,9 +86,21 @@ function PlusIcon() {
 export default function TasksSection({ tasks, onToggleReminder, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, defaultDate }) {
   const [form, setForm] = useState(null) // null | 'new' | taskId
   const [confirmDelete, setConfirmDelete] = useState(null) // taskId of a repeating task
+  const [dupFor, setDupFor] = useState(null)   // taskId whose "duplicate to…" picker is open
+  const [dupDate, setDupDate] = useState('')   // chosen target day for the duplicate
+  const [dupMsg, setDupMsg] = useState(null)   // { id, text } transient "duplicated to…" note
   const [showCompleted, setShowCompleted] = useState(false)
 
   const closeForm = () => setForm(null)
+
+  // A duplicate can land on another day (which may not be the day in view), so
+  // confirm where it went instead of leaving Chris wondering if it worked.
+  const runDuplicate = (task) => {
+    onDuplicate(task, dupDate)
+    setDupFor(null)
+    setDupMsg({ id: task.id, text: `Duplicated to ${prettyDate(dupDate)}` })
+    setTimeout(() => setDupMsg(m => (m?.id === task.id ? null : m)), 3000)
+  }
 
   // Checked-off tasks drop out of the active list into their own collapsed
   // "Completed" group, so a done item never reads like a fresh standalone task.
@@ -145,10 +172,16 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
             )}
             {onDuplicate && (
               <button
-                onClick={() => onDuplicate(task)}
+                onClick={() => {
+                  setDupDate(task.date || defaultDate || isoPlus(0))
+                  setDupFor(dupFor === task.id ? null : task.id)
+                  setConfirmDelete(null)
+                }}
                 aria-label="Duplicate task"
                 title="Duplicate"
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-faint hover:text-fg hover:bg-surface2 transition-colors"
+                className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${
+                  dupFor === task.id ? 'text-fg bg-surface2' : 'text-faint hover:text-fg hover:bg-surface2'
+                }`}
               >
                 <CopyIcon />
               </button>
@@ -169,6 +202,65 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
             </button>
           </div>
         </div>
+
+        {/* Duplicate to a chosen day — quick presets plus a date field, so a
+            block can be reused on the next shoot day without retyping it. */}
+        {dupFor === task.id && (
+          <div className="mt-3 pt-3 border-t border-line space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted">Duplicate to…</span>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => setDupDate(task.date || defaultDate || isoPlus(0))}
+                  className={`text-xs px-2 py-1 rounded-lg border transition-colors ${dupDate === (task.date || defaultDate) ? 'border-line2 text-fg bg-surface2' : 'border-line text-muted hover:text-fg'}`}
+                >
+                  Same day
+                </button>
+                <button
+                  onClick={() => setDupDate(isoPlus(1))}
+                  className={`text-xs px-2 py-1 rounded-lg border transition-colors ${dupDate === isoPlus(1) ? 'border-line2 text-fg bg-surface2' : 'border-line text-muted hover:text-fg'}`}
+                >
+                  Tomorrow
+                </button>
+                <button
+                  onClick={() => setDupDate(isoPlus(7))}
+                  className={`text-xs px-2 py-1 rounded-lg border transition-colors ${dupDate === isoPlus(7) ? 'border-line2 text-fg bg-surface2' : 'border-line text-muted hover:text-fg'}`}
+                >
+                  Next week
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <input
+                type="date"
+                value={dupDate}
+                onChange={e => setDupDate(e.target.value)}
+                className="input py-1 text-xs"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setDupFor(null)}
+                  className="text-xs px-2.5 py-1 rounded-lg text-faint hover:text-fg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => runDuplicate(task)}
+                  disabled={!dupDate}
+                  className="text-xs px-2.5 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
+                >
+                  Duplicate
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {dupMsg?.id === task.id && (
+          <div className="mt-3 pt-3 border-t border-line flex items-center gap-1.5 text-xs text-muted">
+            <CopyIcon /> {dupMsg.text}
+          </div>
+        )}
 
         {/* Repeating tasks: delete just today's, or stop the series here. */}
         {confirmDelete === task.id && (
