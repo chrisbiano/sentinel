@@ -180,11 +180,9 @@ export default function ComposeModal({ email, onClose, onSent }) {
             </div>
 
             <div className="px-5 py-3 overflow-y-auto flex-1">
-              {/* What you're replying to — the last message, collapsed by default
-                  so it's there for a glance but never in the way. Uses the full
-                  trailer-stripped body when the preview provides it, else Gmail's
-                  short snippet. */}
-              {(prefill.originalBody || email.snippet) && (
+              {/* What you're replying to — a glance at the last message via
+                  Gmail's snippet, collapsed by default so it's never in the way. */}
+              {email.snippet && (
                 <div className="mb-3 rounded-xl border border-line2 bg-surface2/30">
                   <button
                     onClick={() => setShowOriginal(v => !v)}
@@ -193,7 +191,7 @@ export default function ComposeModal({ email, onClose, onSent }) {
                     <span className={`text-faint text-xs shrink-0 transition-transform ${showOriginal ? 'rotate-90' : ''}`}>›</span>
                     <span className="text-xs text-muted truncate min-w-0">
                       In reply to <span className="text-fg">{email.sender || 'this message'}</span>
-                      {!showOriginal && email.snippet && (
+                      {!showOriginal && (
                         <span className="text-faint"> — {email.snippet}</span>
                       )}
                     </span>
@@ -201,7 +199,7 @@ export default function ComposeModal({ email, onClose, onSent }) {
                   {showOriginal && (
                     <div className="px-3 pb-3">
                       <div className="max-h-40 overflow-y-auto text-xs text-muted whitespace-pre-wrap leading-relaxed border-t border-line pt-2">
-                        {prefill.originalBody || email.snippet}
+                        {email.snippet}
                       </div>
                     </div>
                   )}
