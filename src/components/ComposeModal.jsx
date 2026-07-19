@@ -35,18 +35,39 @@ export default function ComposeModal({ email, onClose, onSent }) {
     let cancelled = false
     ;(async () => {
       setLoading(true); setError(null)
-      const { data, error: fnError } = await supabase.functions.invoke('gmail-send', {
-        body: { messageId: email.message_id, accountEmail: email.account_email, mode: 'preview' },
-      })
-      if (cancelled) return
-      if (fnError || data?.error) {
-        setError((data && data.error) || fnError?.message || 'Could not open the reply')
-      } else {
-        setPrefill(data)
-        setTo(data.to || '')
-        setSubject(data.subject || '')
+      try {
+        // Never let the modal sit on "Opening reply…" forever: race the call
+        // against a timeout, and always read the hidden non-2xx body so a real
+        // error (bad scope, message not found) shows instead of a silent hang.
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 25000))
+        const { data, error: fnError } = await Promise.race([
+          supabase.functions.invoke('gmail-send', {
+            body: { messageId: email.message_id, accountEmail: email.account_email, mode: 'preview' },
+          }),
+          timeout,
+        ])
+        if (cancelled) return
+        if (fnError || data?.error) {
+          let msg = data?.error
+          if (fnError) {
+            try { const b = await fnError.context?.json?.(); msg = b?.message || b?.error || fnError.message } catch { msg = fnError.message }
+          }
+          setError(msg || 'Could not open the reply')
+        } else {
+          setPrefill(data)
+          setTo(data.to || '')
+          setSubject(data.subject || '')
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e?.message === 'timeout'
+            ? 'Opening the reply timed out. Check your connection and try again.'
+            : (e?.message || 'Could not open the reply'))
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-      setLoading(false)
     })()
     return () => { cancelled = true }
   }, [email.message_id, email.account_email])
