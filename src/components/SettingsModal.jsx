@@ -11,7 +11,7 @@ import {
    any reminder depends on it. The iOS reality is baked in: on iPhone, push only
    works once Sentinel is installed to the home screen, so a Safari tab is
    guided to install rather than shown a button that can't work. */
-function NotificationsSection() {
+function NotificationsSection({ morningBrief, onMorningBriefChange }) {
   const [status] = useState(pushStatus)      // ready | ios-needs-install | unsupported | unconfigured
   const [enabled, setEnabled] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -104,6 +104,19 @@ function NotificationsSection() {
             >
               {busy ? 'Sending…' : 'Send a test notification'}
             </button>
+          )}
+
+          {/* Account-wide, but delivered by push, so it lives with notifications. */}
+          {enabled && onMorningBriefChange && (
+            <div className="flex items-center justify-between gap-4 mt-4 pt-3 border-t border-line">
+              <div className="min-w-0">
+                <p className="text-sm text-fg">Morning brief</p>
+                <p className="text-xs text-faint mt-0.5">
+                  A 7am summary of your day — schedule, tasks, and emails needing a reply.
+                </p>
+              </div>
+              <Toggle checked={morningBrief} onChange={onMorningBriefChange} />
+            </div>
           )}
         </>
       )}
@@ -311,7 +324,7 @@ function AccountRow({ account, onSetPurpose, onDisconnect }) {
   )
 }
 
-export default function SettingsModal({ open, onClose, settings, onChange }) {
+export default function SettingsModal({ open, onClose, settings, onChange, morningBrief, onMorningBriefChange }) {
   const [email, setEmail] = useState(null)
   const [connecting, setConnecting] = useState(false)
   const { accounts, loading: accountsLoading, disconnect, setPurpose } = useConnectedAccounts()
@@ -401,7 +414,9 @@ export default function SettingsModal({ open, onClose, settings, onChange }) {
           )}
 
           {/* Notifications — Web Push for reminders */}
-          {isSupabaseConfigured && <NotificationsSection />}
+          {isSupabaseConfigured && (
+            <NotificationsSection morningBrief={morningBrief} onMorningBriefChange={onMorningBriefChange} />
+          )}
 
           {/* Connected mailboxes */}
           {isConnectConfigured && (

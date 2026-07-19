@@ -26,6 +26,20 @@ export function rowToTask(row) {
   }
 }
 
+// The absolute UTC instant a reminder should fire, from the task's LOCAL date +
+// time (the browser's zone is the user's zone). Null unless it has a reminder,
+// a date, and a time. The scheduler just fires anything whose remind_at passed —
+// no server-side timezone math needed.
+export function computeRemindAt(task) {
+  if (!task.hasReminder || !task.date || !task.time) return null
+  const m = String(task.time).match(/(\d+):(\d+)\s*(AM|PM)/i)
+  if (!m) return null
+  let h = Number(m[1]) % 12
+  if (/pm/i.test(m[3])) h += 12
+  const [Y, Mo, D] = String(task.date).split('-').map(Number)
+  return new Date(Y, Mo - 1, D, h, Number(m[2]), 0, 0).toISOString()   // local → UTC
+}
+
 export function taskToRow(task, userId) {
   const row = {
     // null date = unscheduled (lives in the Inbox until it gets a day).
@@ -37,6 +51,7 @@ export function taskToRow(task, userId) {
     is_urgent: task.isUrgent ?? false,
     completed: task.completed ?? false,
     subtasks: task.subtasks ?? [],
+    remind_at: computeRemindAt(task),
   }
   if (task.seriesId) row.series_id = task.seriesId
   if (task.recurrence) row.recurrence = task.recurrence
@@ -55,6 +70,10 @@ function patchToRow(patch) {
   if ('isUrgent' in patch) row.is_urgent = patch.isUrgent
   if ('completed' in patch) row.completed = patch.completed
   if ('subtasks' in patch) row.subtasks = patch.subtasks
+  // remind_at / reminder_fired_at are recomputed by the hook (it has the merged
+  // task) and passed through explicitly when a reminder-relevant field changes.
+  if ('remindAt' in patch) row.remind_at = patch.remindAt
+  if ('reminderFiredAt' in patch) row.reminder_fired_at = patch.reminderFiredAt
   return row
 }
 

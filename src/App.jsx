@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import useTasks from './hooks/useTasks'
+import useUserPrefs from './hooks/useUserPrefs'
 import { toISODate } from './lib/tasks'
 import useCalendarEvents from './hooks/useCalendarEvents'
 import useEventNotes from './hooks/useEventNotes'
@@ -34,6 +35,10 @@ export default function App() {
     error: taskError,
     clearError: clearTaskError,
   } = useTasks()
+
+  // Captures the browser timezone (so the morning brief lands at 7am local) and
+  // holds the brief on/off toggle.
+  const { morningBrief, setMorningBrief } = useUserPrefs()
 
   const [settings, setSettings] = useState(() => {
     try {
@@ -331,6 +336,8 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         settings={settings}
         onChange={setSettings}
+        morningBrief={morningBrief}
+        onMorningBriefChange={setMorningBrief}
       />
 
       <UndoToast

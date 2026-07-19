@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import {
   fetchTasks, insertTask, insertTasks, updateTaskRow, deleteTaskRow,
-  deleteSeriesFrom, toISODate,
+  deleteSeriesFrom, toISODate, computeRemindAt,
 } from '../lib/tasks'
 import { occurrences } from '../lib/recurrence'
 
@@ -150,7 +150,14 @@ export default function useTasks() {
 
   const updateTask = useCallback((id, data) => {
     setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...data } : t)))
-    if (isSupabaseConfigured) updateTaskRow(id, data).catch(e => console.error('Update failed:', e))
+    const patch = { ...data }
+    // If a reminder-relevant field changed, recompute when it fires and re-arm it.
+    if ('date' in data || 'time' in data || 'hasReminder' in data) {
+      const cur = tasksRef.current.find(t => t.id === id)
+      patch.remindAt = computeRemindAt({ ...cur, ...data })
+      patch.reminderFiredAt = null
+    }
+    if (isSupabaseConfigured) updateTaskRow(id, patch).catch(e => console.error('Update failed:', e))
   }, [])
 
   const deleteTask = useCallback((id) => {
@@ -162,8 +169,11 @@ export default function useTasks() {
     const t = tasksRef.current.find(x => x.id === id)
     if (!t) return
     const next = !t.hasReminder
+    const remindAt = computeRemindAt({ ...t, hasReminder: next })
     setTasks(prev => prev.map(x => (x.id === id ? { ...x, hasReminder: next } : x)))
-    if (isSupabaseConfigured) updateTaskRow(id, { hasReminder: next }).catch(e => console.error(e))
+    if (isSupabaseConfigured) {
+      updateTaskRow(id, { hasReminder: next, remindAt, reminderFiredAt: null }).catch(e => console.error(e))
+    }
   }, [])
 
   const toggleComplete = useCallback((id) => {
