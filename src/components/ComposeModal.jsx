@@ -40,7 +40,7 @@ export default function ComposeModal({ email, onClose, onSent }) {
         // against a timeout, and always read the hidden non-2xx body so a real
         // error (bad scope, message not found) shows instead of a silent hang.
         const timeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 25000))
+          setTimeout(() => reject(new Error('timeout')), 35000))
         const { data, error: fnError } = await Promise.race([
           supabase.functions.invoke('gmail-send', {
             body: { messageId: email.message_id, accountEmail: email.account_email, mode: 'preview' },

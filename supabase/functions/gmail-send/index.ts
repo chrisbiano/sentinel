@@ -32,6 +32,17 @@ const json = (body: unknown, status = 200) =>
     status, headers: { ...cors, 'Content-Type': 'application/json' },
   })
 
+// fetch that can't hang: a stalled Google/Gmail read returns null after `ms`
+// instead of blocking the whole request until the client gives up. Only used on
+// READ calls — never on the actual send, which we must not abort mid-flight.
+async function fetchT(url: string, opts: RequestInit = {}, ms = 12000) {
+  try {
+    return await fetch(url, { ...opts, signal: AbortSignal.timeout(ms) })
+  } catch {
+    return null
+  }
+}
+
 async function freshAccessToken(admin: any, account: any) {
   const { data: tok } = await admin
     .from('account_tokens').select('*').eq('account_id', account.id).single()
@@ -41,7 +52,7 @@ async function freshAccessToken(admin: any, account: any) {
     new Date(tok.expires_at).getTime() > Date.now() + 60_000
   if (stillValid) return tok.access_token
 
-  const res = await fetch('https://oauth2.googleapis.com/token', {
+  const res = await fetchT('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -51,8 +62,8 @@ async function freshAccessToken(admin: any, account: any) {
       grant_type: 'refresh_token',
     }),
   })
-  const j = await res.json()
-  if (!res.ok || !j.access_token) {
+  const j = res ? await res.json() : null
+  if (!res || !res.ok || !j?.access_token) {
     await admin.from('connected_accounts').update({ status: 'error' }).eq('id', account.id)
     return null
   }
@@ -110,11 +121,11 @@ async function originalContext(token: string, gmailId: string) {
   const params = new URLSearchParams({ format: 'metadata' })
   for (const h of ['Message-ID', 'References', 'Subject', 'From', 'Reply-To'])
     params.append('metadataHeaders', h)
-  const r = await fetch(
+  const r = await fetchT(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages/${gmailId}?${params}`,
     { headers: { Authorization: `Bearer ${token}` } },
   )
-  if (!r.ok) return null
+  if (!r || !r.ok) return null
   const m = await r.json()
   const h = m.payload?.headers ?? []
   const subject = findHeader(h, 'Subject')
@@ -130,11 +141,11 @@ async function originalContext(token: string, gmailId: string) {
 // The signature Gmail shows for this identity, plus the display name, straight
 // from the account's send-as settings — the exact HTML, sent verbatim.
 async function sendAsIdentity(token: string, accountEmail: string) {
-  const r = await fetch(
+  const r = await fetchT(
     'https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs',
     { headers: { Authorization: `Bearer ${token}` } },
   )
-  if (!r.ok) return { displayName: '', signature: '' }
+  if (!r || !r.ok) return { displayName: '', signature: '' }
   const j = await r.json()
   const list = j.sendAs ?? []
   const mine = list.find((s: any) => s.sendAsEmail?.toLowerCase() === accountEmail.toLowerCase())
@@ -155,11 +166,11 @@ function b64urlToText(data: string) {
 
 // The original's full renderable body + headers, for quoting into a forward.
 async function originalFull(token: string, gmailId: string) {
-  const r = await fetch(
+  const r = await fetchT(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages/${gmailId}?format=full`,
     { headers: { Authorization: `Bearer ${token}` } },
   )
-  if (!r.ok) return null
+  if (!r || !r.ok) return null
   const m = await r.json()
   const h = m.payload?.headers ?? []
 
@@ -241,11 +252,6 @@ Deno.serve(async (req) => {
     .single()
   if (!row) return json({ error: 'No such message' }, 404)
 
-  const identity = await sendAsIdentity(token, accountEmail)
-  const fromHeader = identity.displayName
-    ? `${encodeHeader(identity.displayName)} <${accountEmail}>`
-    : accountEmail
-
   // Forward: quote the whole original and pass it on to a new recipient. It's a
   // fresh thread (no In-Reply-To) and is NOT marked handled — forwarding an
   // email doesn't mean you've dealt with it.
@@ -254,8 +260,15 @@ Deno.serve(async (req) => {
     if (!to || typeof text !== 'string') {
       return json({ error: 'Expected { to, text } to forward' }, 400)
     }
-    const orig = await originalFull(token, messageId)
+    // Signature + full original in parallel — two Gmail reads, one wait.
+    const [identity, orig] = await Promise.all([
+      sendAsIdentity(token, accountEmail),
+      originalFull(token, messageId),
+    ])
     if (!orig) return json({ error: 'Could not read the original message' }, 502)
+    const fromHeader = identity.displayName
+      ? `${encodeHeader(identity.displayName)} <${accountEmail}>`
+      : accountEmail
 
     const typed = escapeHtml(text).replace(/\n/g, '<br>')
     const fwdSubject = /^fwd:/i.test(orig.subject) ? orig.subject : `Fwd: ${orig.subject}`
@@ -297,8 +310,16 @@ Deno.serve(async (req) => {
     return json({ ok: true })
   }
 
-  const ctx = await originalContext(token, messageId)
+  // preview / send: signature + reply-threading context in parallel, so the
+  // compose modal isn't waiting on two sequential Gmail round-trips.
+  const [identity, ctx] = await Promise.all([
+    sendAsIdentity(token, accountEmail),
+    originalContext(token, messageId),
+  ])
   if (!ctx) return json({ error: 'Could not read the original message' }, 502)
+  const fromHeader = identity.displayName
+    ? `${encodeHeader(identity.displayName)} <${accountEmail}>`
+    : accountEmail
 
   // Preview: hand the modal everything it needs to show what will go out.
   if (mode === 'preview') {
