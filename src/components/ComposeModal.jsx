@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
+function SparkleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+      <path d="M12 2l1.6 4.6L18 8l-4.4 1.4L12 14l-1.6-4.6L6 8l4.4-1.4L12 2zM19 14l.9 2.6L22 17l-2.1.4L19 20l-.9-2.6L16 17l2.1-.4L19 14z" />
+    </svg>
+  )
+}
+
 /* Reply to an email as Chris, in a Gmail-style composer.
  *
  * On open it asks the server for a preview: the correct From identity, the
@@ -20,6 +28,8 @@ export default function ComposeModal({ email, onClose, onSent }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState(null)
+  const [intent, setIntent] = useState('')       // one-line note for the AI draft
+  const [drafting, setDrafting] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -46,6 +56,28 @@ export default function ComposeModal({ email, onClose, onSent }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // Ask Claude to draft the reply body from a one-line intent. It fills the box;
+  // Chris always edits and sends himself — nothing goes out from here.
+  const draft = async () => {
+    if (drafting) return
+    setDrafting(true); setError(null)
+    const { data, error: fnError } = await supabase.functions.invoke('gmail-draft', {
+      body: { messageId: email.message_id, accountEmail: email.account_email, intent },
+    })
+    if (fnError || data?.error) {
+      // supabase-js hides a non-2xx body — read it for the real message.
+      let msg = data?.error
+      if (fnError) {
+        try { const b = await fnError.context?.json?.(); msg = b?.message || b?.error || fnError.message } catch { msg = fnError.message }
+      }
+      setError(msg || 'Could not draft that reply')
+      setDrafting(false)
+      return
+    }
+    setText(data.draft || '')
+    setDrafting(false)
+  }
 
   const send = async () => {
     if (!text.trim() || sending) return
@@ -126,12 +158,37 @@ export default function ComposeModal({ email, onClose, onSent }) {
             </div>
 
             <div className="px-5 py-3 overflow-y-auto flex-1">
+              {/* AI draft: a one-line intent → Claude fills the reply below. It
+                  never sends; Chris edits and hits Send. */}
+              <div className="mb-3 rounded-xl border border-line2 bg-surface2/40 p-2.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={intent}
+                    onChange={e => setIntent(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); draft() } }}
+                    placeholder="Tell the AI what to say — e.g. “yes, Tuesday works”"
+                    className="input flex-1 py-1.5 text-sm"
+                  />
+                  <button
+                    onClick={draft}
+                    disabled={drafting}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-surface2 border border-line2 text-fg font-medium hover:bg-surface transition-colors disabled:opacity-50 shrink-0"
+                  >
+                    <SparkleIcon />
+                    {drafting ? 'Drafting…' : (text ? 'Redraft' : 'Draft')}
+                  </button>
+                </div>
+                <p className="text-[11px] text-faint mt-1.5">
+                  Claude reads the email and writes the reply below — you edit and send. Leave blank for a sensible default.
+                </p>
+              </div>
+
               <textarea
                 autoFocus
                 value={text}
                 onChange={e => setText(e.target.value)}
                 rows={8}
-                placeholder="Write your reply…"
+                placeholder="Write your reply, or use Draft above…"
                 className="input w-full text-sm resize-none"
               />
 
