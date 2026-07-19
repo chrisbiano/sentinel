@@ -115,14 +115,52 @@ const findHeader = (headers: any[], name: string) =>
 
 /* ---------- Gmail lookups ---------- */
 
-// The original message's threading + reply target. We stored the Gmail id and
-// thread id, but not the RFC Message-ID, so re-fetch just the headers we need.
+const fromName = (value: string) => {
+  const m = value.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/)
+  return (m ? (m[1].trim() || m[2].trim()) : value.trim()).replace(/^["']|["']$/g, '')
+}
+
+// HTML → readable text, keeping line breaks (unlike the classifier, which flattens
+// everything). For showing "what you're replying to", not for sending.
+function htmlToText(html: string) {
+  return html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+}
+
+// Just the latest message's text — quoted trailer cut at the seam — so a reply
+// shows the last thing that was said, not the whole chain.
+function extractLatestText(payload: any, cap = 4000): string {
+  const plain: string[] = []
+  const html: string[] = []
+  const walk = (part: any) => {
+    if (!part) return
+    const d = part.body?.data
+    if (d) {
+      if (part.mimeType === 'text/plain') plain.push(b64urlToText(d))
+      else if (part.mimeType === 'text/html') html.push(b64urlToText(d))
+    }
+    for (const p of part.parts ?? []) walk(p)
+  }
+  walk(payload)
+  const raw = plain.length ? plain.join('\n') : htmlToText(html.join('\n'))
+  return raw
+    .split(/^\s*(On .{0,80}wrote:|-{2,}\s*Original Message|_{5,})/m)[0]
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, cap)
+}
+
+// The original message's threading + reply target + the latest message's text.
+// Fetched full so the compose modal can also show what's being replied to.
 async function originalContext(token: string, gmailId: string) {
-  const params = new URLSearchParams({ format: 'metadata' })
-  for (const h of ['Message-ID', 'References', 'Subject', 'From', 'Reply-To'])
-    params.append('metadataHeaders', h)
   const r = await fetchT(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${gmailId}?${params}`,
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${gmailId}?format=full`,
     { headers: { Authorization: `Bearer ${token}` } },
   )
   if (!r || !r.ok) return null
@@ -134,7 +172,9 @@ async function originalContext(token: string, gmailId: string) {
     messageId: findHeader(h, 'Message-ID'),         // for In-Reply-To / References
     references: findHeader(h, 'References'),
     replyTo: findHeader(h, 'Reply-To') || findHeader(h, 'From'),
+    fromName: fromName(findHeader(h, 'From')),
     subject: /^re:/i.test(subject) ? subject : `Re: ${subject}`,
+    body: extractLatestText(m.payload),
   }
 }
 
@@ -321,13 +361,16 @@ Deno.serve(async (req) => {
     ? `${encodeHeader(identity.displayName)} <${accountEmail}>`
     : accountEmail
 
-  // Preview: hand the modal everything it needs to show what will go out.
+  // Preview: hand the modal everything it needs to show what will go out, plus
+  // the last message's text so Chris can see what he's replying to.
   if (mode === 'preview') {
     return json({
       from: identity.displayName ? `${identity.displayName} <${accountEmail}>` : accountEmail,
       to: ctx.replyTo,
       subject: ctx.subject,
       signatureHtml: identity.signature,
+      originalBody: ctx.body,
+      originalFrom: ctx.fromName,
     })
   }
 

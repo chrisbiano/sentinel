@@ -30,6 +30,7 @@ export default function ComposeModal({ email, onClose, onSent }) {
   const [error, setError] = useState(null)
   const [intent, setIntent] = useState('')       // one-line note for the AI draft
   const [drafting, setDrafting] = useState(false)
+  const [showOriginal, setShowOriginal] = useState(false)   // "in reply to" quote
 
   useEffect(() => {
     let cancelled = false
@@ -179,6 +180,34 @@ export default function ComposeModal({ email, onClose, onSent }) {
             </div>
 
             <div className="px-5 py-3 overflow-y-auto flex-1">
+              {/* What you're replying to — the last message, collapsed by default
+                  so it's there for a glance but never in the way. Uses the full
+                  trailer-stripped body when the preview provides it, else Gmail's
+                  short snippet. */}
+              {(prefill.originalBody || email.snippet) && (
+                <div className="mb-3 rounded-xl border border-line2 bg-surface2/30">
+                  <button
+                    onClick={() => setShowOriginal(v => !v)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left"
+                  >
+                    <span className={`text-faint text-xs shrink-0 transition-transform ${showOriginal ? 'rotate-90' : ''}`}>›</span>
+                    <span className="text-xs text-muted truncate min-w-0">
+                      In reply to <span className="text-fg">{email.sender || 'this message'}</span>
+                      {!showOriginal && email.snippet && (
+                        <span className="text-faint"> — {email.snippet}</span>
+                      )}
+                    </span>
+                  </button>
+                  {showOriginal && (
+                    <div className="px-3 pb-3">
+                      <div className="max-h-40 overflow-y-auto text-xs text-muted whitespace-pre-wrap leading-relaxed border-t border-line pt-2">
+                        {prefill.originalBody || email.snippet}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* AI draft: a one-line intent → Claude fills the reply below. It
                   never sends; Chris edits and hits Send. */}
               <div className="mb-3 rounded-xl border border-line2 bg-surface2/40 p-2.5">
