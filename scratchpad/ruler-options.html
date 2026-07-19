@@ -1,0 +1,115 @@
+<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/assets/index-GrbDVJPM.css">
+<style>
+  body{background:var(--c-bg,#151515);padding:14px;font-family:system-ui,sans-serif;}
+  .opt-label{color:var(--c-fg);font-size:15px;font-weight:600;margin:6px 2px 2px;}
+  .opt-desc{color:var(--c-faint);font-size:12px;margin:0 2px 12px;line-height:1.4;}
+  .hr{color:var(--c-faint);font-size:11px;position:absolute;width:52px;text-align:right;transform:translateY(-50%);}
+  .dot{position:absolute;left:-3.5px;top:-3.5px;width:7px;height:7px;border-radius:9999px;background:var(--c-line);transform:translateY(-50%);}
+  .blk{position:absolute;left:64px;right:8px;}
+</style>
+</head>
+<body>
+
+<!-- ============ OPTION A ============ -->
+<div class="opt-label">Option A — full hourly scale, stretches with content</div>
+<div class="opt-desc">Every hour sits on the left. Busy blocks (with subtasks) push their hours further apart; quiet stretches stay compact. A complete, continuous clock that "breathes".</div>
+<div class="card p-3" style="position:relative;height:680px;">
+  <div style="position:absolute;left:56px;top:8px;bottom:8px;width:1px;background:var(--c-line);"></div>
+  <!-- every hour -->
+  <div style="position:absolute;left:0;top:14px;"><span class="hr" style="top:0">7 AM</span><span class="dot" style="top:0"></span></div>
+  <div style="position:absolute;left:0;top:44px;"><span class="hr" style="top:0">8 AM</span><span class="dot" style="top:0"></span></div>
+  <div style="position:absolute;left:0;top:74px;"><span class="hr" style="top:0">9 AM</span><span class="dot" style="top:0"></span></div>
+  <div style="position:absolute;left:0;top:130px;"><span class="hr" style="top:0">10 AM</span></div>
+  <div style="position:absolute;left:0;top:200px;"><span class="hr" style="top:0">11 AM</span></div>
+  <div style="position:absolute;left:0;top:270px;"><span class="hr" style="top:0">12 PM</span></div>
+  <div style="position:absolute;left:0;top:340px;"><span class="hr" style="top:0">1 PM</span></div>
+  <div style="position:absolute;left:0;top:410px;"><span class="hr" style="top:0">2 PM</span><span class="dot" style="top:0;left:53px"></span></div>
+  <div style="position:absolute;left:0;top:450px;"><span class="hr" style="top:0">3 PM</span></div>
+  <div style="position:absolute;left:0;top:490px;"><span class="hr" style="top:0">4 PM</span></div>
+  <div style="position:absolute;left:0;top:530px;"><span class="hr" style="top:0">5 PM</span></div>
+  <div style="position:absolute;left:0;top:560px;"><span class="hr" style="top:0">6 PM</span><span class="dot" style="top:0;left:53px"></span></div>
+  <div style="position:absolute;left:0;top:590px;"><span class="hr" style="top:0">7 PM</span><span class="dot" style="top:0;left:53px"></span></div>
+  <div style="position:absolute;left:0;top:620px;"><span class="hr" style="top:0">8 PM</span><span class="dot" style="top:0;left:53px"></span></div>
+  <div style="position:absolute;left:0;top:650px;"><span class="hr" style="top:0">9 PM</span><span class="dot" style="top:0;left:53px"></span></div>
+
+  <!-- Client Work block: 9:30-1:30, tall (subtasks). Occupies the stretched hours -->
+  <div class="blk" style="top:88px;height:270px;">
+    <div class="border border-line2 rounded-xl px-3 py-2" style="height:100%;box-sizing:border-box;">
+      <div class="flex items-center gap-2 flex-wrap"><input type="checkbox" class="w-3.5 h-3.5 rounded bg-surface2 border-line2"><h3 class="font-medium text-sm text-fg">Client Work</h3><span class="text-[10px] text-faint border border-line2 rounded px-1.5 py-0.5">Event</span></div>
+      <div class="text-xs text-faint mt-1">9:30 AM – 1:30 PM</div>
+      <ul class="mt-2 space-y-1.5">
+        <li class="flex items-center gap-1.5 text-xs text-faint line-through">MB Podcast EP08</li>
+        <li class="flex items-center gap-1.5 text-xs text-faint line-through">EP08 Thumbnails</li>
+        <li class="flex items-center gap-1.5 text-xs text-faint line-through">Clip · Open Worship</li>
+        <li class="flex items-center gap-1.5 text-xs text-muted">Additional Thumbnail</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Rosie 2-5 empty -->
+  <div class="blk" style="top:408px;height:118px;">
+    <div class="border border-line2 rounded-xl px-3 py-2" style="height:100%;box-sizing:border-box;">
+      <div class="flex items-center gap-2 flex-wrap"><input type="checkbox" checked class="w-3.5 h-3.5 rounded"><h3 class="font-medium text-sm line-through text-faint">Rosie cupcake party</h3><span class="text-[10px] text-faint border border-line2 rounded px-1.5 py-0.5">Task</span></div>
+      <div class="text-xs text-faint mt-1">2:00 PM – 5:00 PM</div>
+    </div>
+  </div>
+
+  <!-- Charge cameras 8:30 short -->
+  <div class="blk" style="top:634px;">
+    <div class="flex items-center gap-2 flex-wrap"><input type="checkbox" class="w-3.5 h-3.5 rounded"><h3 class="font-medium text-sm text-fg">Charge cameras</h3><span class="text-[10px] text-faint border border-line2 rounded px-1.5 py-0.5">Task</span></div>
+    <div class="text-xs text-faint mt-0.5">8:30 – 9:00 PM · 30 min</div>
+  </div>
+</div>
+
+<!-- ============ OPTION B ============ -->
+<div class="opt-label" style="margin-top:22px;">Option B — only times that matter to what's scheduled</div>
+<div class="opt-desc">The left shows just the hours tied to real events/tasks (their start, end, and the hours inside them). Empty stretches stay clean. A day with nothing scheduled falls back to 7 · 12 · 3 · 7.</div>
+<div class="card p-3" style="position:relative;height:560px;">
+  <div style="position:absolute;left:56px;top:8px;bottom:8px;width:1px;background:var(--c-line);"></div>
+  <!-- only event-relevant times -->
+  <div style="position:absolute;left:0;top:70px;"><span class="hr" style="top:0">9:30 AM</span></div>
+  <div style="position:absolute;left:0;top:150px;"><span class="hr" style="top:0">11 AM</span></div>
+  <div style="position:absolute;left:0;top:230px;"><span class="hr" style="top:0">12 PM</span></div>
+  <div style="position:absolute;left:0;top:300px;"><span class="hr" style="top:0">1:30 PM</span></div>
+  <div style="position:absolute;left:0;top:360px;"><span class="hr" style="top:0">2:00 PM</span></div>
+  <div style="position:absolute;left:0;top:440px;"><span class="hr" style="top:0">5:00 PM</span></div>
+  <div style="position:absolute;left:0;top:500px;"><span class="hr" style="top:0">8:30 PM</span></div>
+
+  <div class="blk" style="top:64px;height:250px;">
+    <div class="border border-line2 rounded-xl px-3 py-2" style="height:100%;box-sizing:border-box;">
+      <div class="flex items-center gap-2 flex-wrap"><input type="checkbox" class="w-3.5 h-3.5 rounded bg-surface2 border-line2"><h3 class="font-medium text-sm text-fg">Client Work</h3><span class="text-[10px] text-faint border border-line2 rounded px-1.5 py-0.5">Event</span></div>
+      <div class="text-xs text-faint mt-1">9:30 AM – 1:30 PM</div>
+      <ul class="mt-2 space-y-1.5">
+        <li class="flex items-center gap-1.5 text-xs text-faint line-through">MB Podcast EP08</li>
+        <li class="flex items-center gap-1.5 text-xs text-faint line-through">EP08 Thumbnails</li>
+        <li class="flex items-center gap-1.5 text-xs text-faint line-through">Clip · Open Worship</li>
+        <li class="flex items-center gap-1.5 text-xs text-muted">Additional Thumbnail</li>
+      </ul>
+    </div>
+  </div>
+  <div class="blk" style="top:354px;height:118px;">
+    <div class="border border-line2 rounded-xl px-3 py-2" style="height:100%;box-sizing:border-box;">
+      <div class="flex items-center gap-2 flex-wrap"><input type="checkbox" checked class="w-3.5 h-3.5 rounded"><h3 class="font-medium text-sm line-through text-faint">Rosie cupcake party</h3><span class="text-[10px] text-faint border border-line2 rounded px-1.5 py-0.5">Task</span></div>
+      <div class="text-xs text-faint mt-1">2:00 PM – 5:00 PM</div>
+    </div>
+  </div>
+  <div class="blk" style="top:492px;">
+    <div class="flex items-center gap-2 flex-wrap"><input type="checkbox" class="w-3.5 h-3.5 rounded"><h3 class="font-medium text-sm text-fg">Charge cameras</h3><span class="text-[10px] text-faint border border-line2 rounded px-1.5 py-0.5">Task</span></div>
+    <div class="text-xs text-faint mt-0.5">8:30 – 9:00 PM · 30 min</div>
+  </div>
+</div>
+
+<!-- Option B empty-day fallback -->
+<div class="opt-desc" style="margin-top:10px;">Option B — an empty day (nothing scheduled):</div>
+<div class="card p-3" style="position:relative;height:200px;">
+  <div style="position:absolute;left:56px;top:8px;bottom:8px;width:1px;background:var(--c-line);"></div>
+  <div style="position:absolute;left:0;top:20px;"><span class="hr" style="top:0">7 AM</span><span class="dot" style="top:0;left:53px"></span></div>
+  <div style="position:absolute;left:0;top:70px;"><span class="hr" style="top:0">12 PM</span><span class="dot" style="top:0;left:53px"></span></div>
+  <div style="position:absolute;left:0;top:120px;"><span class="hr" style="top:0">3 PM</span><span class="dot" style="top:0;left:53px"></span></div>
+  <div style="position:absolute;left:0;top:170px;"><span class="hr" style="top:0">7 PM</span><span class="dot" style="top:0;left:53px"></span></div>
+  <div style="position:absolute;left:72px;top:82px;" class="text-sm text-muted">Nothing scheduled — add a task to shape the day.</div>
+</div>
+
+</body></html>

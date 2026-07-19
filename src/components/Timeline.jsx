@@ -249,17 +249,13 @@ export default function Timeline({
     return { ...it, _s: s, _e: s + (it.duration || 0) }
   })
 
-  // Every-other-hour ruler (…7, 9, 11, 1, 3, 5, 7…). Empty hours become faint
-  // marks so a long gap reads as a real gap. Always spans at least 7 AM–7 PM,
-  // snapped to odd hours, and stretches for an early riser or a late night.
+  // The gutter shows only times tied to real items — each loose item's start, and
+  // a block's start / end / interior hours. No filler hour ticks in empty
+  // stretches (an empty day gets 7·12·3·7 anchors instead, in the empty state
+  // below). Keep a 7 AM–7 PM window, widened by early/late items, only to bound
+  // the "now" marker so it appears during the day and not at 3 AM.
   const startMinAll = Math.min(7 * 60, ...spans.map(s => s._s))
   const endMinAll = Math.max(19 * 60, ...spans.map(s => s._e))
-  const startH = (() => { const h = Math.floor(startMinAll / 60); return h % 2 ? h : h - 1 })()
-  const endH = (() => { const h = Math.ceil(endMinAll / 60); return h % 2 ? h : h + 1 })()
-  const ticks = []
-  for (let h = startH; h <= endH; h += 2) {
-    ticks.push({ id: `tick-${h}`, isTick: true, _s: h * 60, label: formatMin(h * 60) })
-  }
 
   // A block owns its window; work inside it should be that block's subtasks. So
   // any *separate* item that lays claim to the same time is a double-booking —
@@ -286,31 +282,14 @@ export default function Timeline({
   // also END inside — a thing that runs past the block is a conflict, not a
   // tenant, and stays outside).
   const ownerOf = (r) => boxBlocks.find(b =>
-    r.isTick
-      ? (b._s < r._s && r._s < b._e)
-      : (b._s < r._s && r._e <= b._e && b.duration > r.duration),
+    b._s < r._s && r._e <= b._e && b.duration > r.duration,
   )
-
-  // Times the schedule already prints next to something (a block's start/end, or
-  // a loose item's start). A rail hour tick at the same minute would just double
-  // the label — e.g. an event ending 5:00 PM next to the 5 PM ruler tick — so
-  // those ticks are dropped.
-  const labeledTimes = new Set()
-  boxBlocks.forEach(b => { labeledTimes.add(b._s); labeledTimes.add(b._e) })
-  spans.filter(s => !boxBlocks.includes(s) && !ownerOf(s)).forEach(s => labeledTimes.add(s._s))
 
   const groups = new Map(boxBlocks.map(b => [b, []]))
   const top = []
-  for (const r of [...ticks, ...spans]) {
-    if (!r.isTick && boxBlocks.includes(r)) continue   // a box's own header, added below
+  for (const r of spans) {
+    if (boxBlocks.includes(r)) continue   // a box's own header, added below
     const owner = ownerOf(r)
-    // Hour ticks inside a block are handled by the block itself (its start, end,
-    // and evenly-spread interior marks). On the open rail, keep a tick only if no
-    // real item already labels that minute.
-    if (r.isTick) {
-      if (!owner && !labeledTimes.has(r._s)) top.push(r)
-      continue
-    }
     const row = { ...r, overlaps: conflicts.has(r), insideBox: Boolean(owner) }
     if (owner) groups.get(owner).push(row)
     else top.push(row)
@@ -473,15 +452,6 @@ export default function Timeline({
     </li>
   )
 
-  const tickRow = (t) => (
-    <li key={t.id} className="relative pr-4 py-2.5 pl-6">
-      <span className="absolute -left-[4.75rem] top-2 w-16 text-right text-[10px] text-faint tabular-nums">
-        {t.label}
-      </span>
-      <span className="absolute -left-[2.5px] top-3 w-1.5 h-1.5 rounded-full bg-line" />
-    </li>
-  )
-
   // "You are here." The current time, called out as the boldest, largest label in
   // the gutter, anchored to the rail with a filled dot.
   const nowRow = (n) => (
@@ -615,19 +585,28 @@ export default function Timeline({
 
       <div className="card p-0 overflow-hidden">
         {items.length === 0 ? (
-          <div className="px-5 py-10 text-center">
-            <p className="text-sm text-muted">
-              Nothing scheduled {isToday ? 'today' : `for ${dayLabel}`}.
-            </p>
-            <p className="text-xs text-faint mt-1">
-              Add a task to start shaping this day.
-            </p>
-            <button
-              onClick={() => setAddingTask(true)}
-              className="mt-4 px-4 py-2 bg-accent text-accent-fg rounded-lg font-medium text-sm hover:opacity-90 transition-opacity"
-            >
-              + Add task
-            </button>
+          // A blank day still gets a light sense of scale: four anchors, 7·12·3·7.
+          <div className="relative ml-[4.75rem] border-l border-line my-2" style={{ height: '13rem' }}>
+            {[['7 AM', 12], ['12 PM', 38], ['3 PM', 62], ['7 PM', 88]].map(([label, pct]) => (
+              <div key={label} className="absolute left-0" style={{ top: `${pct}%` }}>
+                <span className="absolute -left-[4.75rem] -translate-y-1/2 w-16 text-right text-[10px] text-faint tabular-nums">{label}</span>
+                <span className="absolute -left-[3px] -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-line" />
+              </div>
+            ))}
+            <div className="absolute inset-0 flex flex-col items-start justify-center pl-6 pr-5">
+              <p className="text-sm text-muted">
+                Nothing scheduled {isToday ? 'today' : `for ${dayLabel}`}.
+              </p>
+              <p className="text-xs text-faint mt-1">
+                Add a task to start shaping this day.
+              </p>
+              <button
+                onClick={() => setAddingTask(true)}
+                className="mt-3 px-4 py-2 bg-accent text-accent-fg rounded-lg font-medium text-sm hover:opacity-90 transition-opacity"
+              >
+                + Add task
+              </button>
+            </div>
           </div>
         ) : (
           <>
@@ -635,8 +614,7 @@ export default function Timeline({
               {top.map(node =>
                 node.isBox ? boxGroup(node)
                   : node.isNow ? nowRow(node)
-                    : node.isTick ? tickRow(node)
-                      : itemRow(node),
+                    : itemRow(node),
               )}
             </ol>
             <button
