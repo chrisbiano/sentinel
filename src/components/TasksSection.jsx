@@ -18,14 +18,6 @@ const prettyDate = (iso) => {
   })
 }
 
-function SparkleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
-      <path d="M12 2l1.6 4.6L18 8l-4.4 1.4L12 14l-1.6-4.6L6 8l4.4-1.4L12 2zM19 14l.9 2.6L22 17l-2.1.4L19 20l-.9-2.6L16 17l2.1-.4L19 14z" />
-    </svg>
-  )
-}
-
 function TaskIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -91,33 +83,15 @@ function PlusIcon() {
   )
 }
 
-export default function TasksSection({ tasks, onToggleReminder, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, onParseTask, highlightId, defaultDate }) {
+export default function TasksSection({ tasks, onToggleReminder, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, highlightId, defaultDate }) {
   const [form, setForm] = useState(null) // null | 'new' | taskId
   const [confirmDelete, setConfirmDelete] = useState(null) // taskId of a repeating task
   const [dupFor, setDupFor] = useState(null)   // taskId whose "duplicate to…" picker is open
   const [dupDate, setDupDate] = useState('')   // chosen target day for the duplicate
   const [dupMsg, setDupMsg] = useState(null)   // { id, text } transient "duplicated to…" note
   const [showCompleted, setShowCompleted] = useState(false)
-  const [nlText, setNlText] = useState('')     // quick-add natural-language box
-  const [parsing, setParsing] = useState(false)
-  const [nlError, setNlError] = useState(null)
-  const [prefill, setPrefill] = useState(null) // AI-parsed task, opens the form pre-filled
 
   const closeForm = () => setForm(null)
-
-  // Quick add: parse the note, then open the form pre-filled so Chris confirms.
-  const submitQuickAdd = async (e) => {
-    e.preventDefault()
-    if (!nlText.trim() || parsing) return
-    setParsing(true); setNlError(null)
-    try {
-      setPrefill(await onParseTask(nlText.trim()))
-    } catch (err) {
-      setNlError(err.message || 'Could not read that — try rephrasing or add it manually.')
-    } finally {
-      setParsing(false)
-    }
-  }
 
   // A duplicate can land on another day (which may not be the day in view), so
   // confirm where it went instead of leaving Chris wondering if it worked.
@@ -344,41 +318,7 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
         }
       />
 
-      {/* Quick add — describe a task in plain words; Claude structures it and
-          opens the form pre-filled to confirm. */}
-      {onParseTask && form !== 'new' && !prefill && (
-        <form onSubmit={submitQuickAdd} className="mb-3">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 min-w-0">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none"><SparkleIcon /></span>
-              <input
-                value={nlText}
-                onChange={e => { setNlText(e.target.value); setNlError(null) }}
-                placeholder="Quick add — “2h edit tomorrow 10am, subtasks pull selects, rough cut”"
-                className="input w-full pl-8 py-1.5 text-sm"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={parsing || !nlText.trim()}
-              className="px-3 py-1.5 text-sm rounded-lg bg-surface2 border border-line2 text-fg font-medium shrink-0 hover:bg-surface transition-colors disabled:opacity-50"
-            >
-              {parsing ? '…' : 'Add'}
-            </button>
-          </div>
-          {nlError && <p className="text-xs text-muted mt-1.5">{nlError}</p>}
-        </form>
-      )}
-
       <div className="space-y-2">
-        {prefill && (
-          <TaskForm
-            initial={prefill}
-            defaultDate={defaultDate}
-            onSave={(data) => { onAdd(data); setPrefill(null); setNlText('') }}
-            onCancel={() => setPrefill(null)}
-          />
-        )}
         {form === 'new' && (
           <TaskForm
             defaultDate={defaultDate}

@@ -17,6 +17,7 @@ import { weekDays, monthGrid } from './lib/dates'
 import EmailSection from './components/EmailSection'
 import TasksSection from './components/TasksSection'
 import SettingsModal from './components/SettingsModal'
+import AssistantLauncher from './components/AssistantLauncher'
 import UndoToast from './components/UndoToast'
 
 const SETTINGS_KEY = 'sentinel.settings.v1'
@@ -375,7 +376,6 @@ export default function App() {
               onDelete={deleteTask}
               onDeleteSeries={deleteSeries}
               onDuplicate={duplicateTask}
-              onParseTask={parseTask}
               highlightId={highlightTaskId}
               defaultDate={selectedISO}
             />
@@ -405,6 +405,13 @@ export default function App() {
         onChange={setSettings}
         morningBrief={morningBrief}
         onMorningBriefChange={setMorningBrief}
+      />
+
+      {/* Floating AI quick-add — bottom-left, always in reach. */}
+      <AssistantLauncher
+        onParseTask={parseTask}
+        onAdd={addTask}
+        defaultDate={selectedISO}
       />
 
       <UndoToast
