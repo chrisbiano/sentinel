@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import useTasks from './hooks/useTasks'
 import useUserPrefs from './hooks/useUserPrefs'
 import { toISODate } from './lib/tasks'
+import { supabase } from './lib/supabase'
 import useCalendarEvents from './hooks/useCalendarEvents'
 import useEventNotes from './hooks/useEventNotes'
 import useEmails from './hooks/useEmails'
@@ -162,6 +163,37 @@ export default function App() {
   }
   const scrollToSection = (id) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  // Quick add: send a natural-language note to Claude and get back a task the
+  // form can pre-fill. Timezone-relative words ("tomorrow") resolve against the
+  // browser's local date, passed along. Returns a TaskForm-shaped object.
+  const parseTask = async (text) => {
+    const now = new Date()
+    const { data, error } = await supabase.functions.invoke('parse-task', {
+      body: {
+        text,
+        today: toISODate(now),
+        weekday: now.toLocaleDateString('en-US', { weekday: 'long' }),
+        nowTime: now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      },
+    })
+    if (error || data?.error) {
+      let msg = data?.error
+      if (error) {
+        try { const b = await error.context?.json?.(); msg = b?.message || b?.error || error.message } catch { msg = error.message }
+      }
+      throw new Error(msg || 'Could not read that')
+    }
+    const p = data.task
+    return {
+      title: p.title,
+      date: p.date,       // YYYY-MM-DD | null
+      time: p.time,       // "10:00 AM" | null
+      duration: p.durationMin,
+      hasReminder: p.reminder,
+      subtasks: (p.subtasks || []).map(t => ({ id: Math.random().toString(36).slice(2, 9), title: t, done: false })),
+    }
   }
 
   // Resolve a reminder deep-link once the task is known: focus its day, scroll to
@@ -343,6 +375,7 @@ export default function App() {
               onDelete={deleteTask}
               onDeleteSeries={deleteSeries}
               onDuplicate={duplicateTask}
+              onParseTask={parseTask}
               highlightId={highlightTaskId}
               defaultDate={selectedISO}
             />
