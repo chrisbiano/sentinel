@@ -134,6 +134,23 @@ export default function App() {
   const [search, setSearch] = useState('')
   const searching = search.trim().length > 0
 
+  // Tapping a reminder deep-links to its task. The service worker sends the id
+  // (via ?task= on a cold open, or a postMessage when a window's already up); we
+  // jump to that task's day and flash it. `tasks` may still be loading, so the
+  // resolve effect below re-runs when it arrives.
+  const [highlightTaskId, setHighlightTaskId] = useState(null)
+  const [pendingTaskId, setPendingTaskId] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('task') } catch { return null }
+  })
+
+  useEffect(() => {
+    const onMsg = (e) => {
+      if (e.data?.type === 'open-task' && e.data.taskId) setPendingTaskId(String(e.data.taskId))
+    }
+    navigator.serviceWorker?.addEventListener('message', onMsg)
+    return () => navigator.serviceWorker?.removeEventListener('message', onMsg)
+  }, [])
+
   // Older notes are missing their event context; fill it in whenever the real
   // event is on screen, so they become searchable without any action from you.
   useEffect(() => {
@@ -146,6 +163,22 @@ export default function App() {
   const scrollToSection = (id) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+
+  // Resolve a reminder deep-link once the task is known: focus its day, scroll to
+  // the task list, and flash the task for a few seconds.
+  useEffect(() => {
+    if (!pendingTaskId) return
+    const t = tasks.find(x => String(x.id) === String(pendingTaskId))
+    if (!t) return   // tasks still loading — this re-runs when they land
+    if (t.date) { setSelectedDate(new Date(`${t.date}T00:00:00`)); setView('day') }
+    setSearch('')
+    setHighlightTaskId(t.id)
+    setPendingTaskId(null)
+    try { window.history.replaceState({}, '', window.location.pathname) } catch { /* ignore */ }
+    setTimeout(() => scrollToSection('tasks-section'), 80)
+    const clear = setTimeout(() => setHighlightTaskId(null), 3000)
+    return () => clearTimeout(clear)
+  }, [pendingTaskId, tasks])
 
   // "This needs an answer, but not right now." Drops a dateless task that rides
   // Today forward until it's checked off — the don't-forget-to-reply net. Marks
@@ -310,6 +343,7 @@ export default function App() {
               onDelete={deleteTask}
               onDeleteSeries={deleteSeries}
               onDuplicate={duplicateTask}
+              highlightId={highlightTaskId}
               defaultDate={selectedISO}
             />
           </div>

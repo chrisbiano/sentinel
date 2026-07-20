@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import SectionHeader from './SectionHeader'
 import TaskForm from './TaskForm'
 import { recurrenceLabel } from '../lib/recurrence'
@@ -83,7 +83,7 @@ function PlusIcon() {
   )
 }
 
-export default function TasksSection({ tasks, onToggleReminder, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, defaultDate }) {
+export default function TasksSection({ tasks, onToggleReminder, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, highlightId, defaultDate }) {
   const [form, setForm] = useState(null) // null | 'new' | taskId
   const [confirmDelete, setConfirmDelete] = useState(null) // taskId of a repeating task
   const [dupFor, setDupFor] = useState(null)   // taskId whose "duplicate to…" picker is open
@@ -107,6 +107,12 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
   const active = tasks.filter(t => !t.completed)
   const completed = tasks.filter(t => t.completed)
 
+  // If a reminder deep-links to a done task, open the Completed group so the
+  // highlight is actually visible.
+  useEffect(() => {
+    if (highlightId && completed.some(t => t.id === highlightId)) setShowCompleted(true)
+  }, [highlightId, completed])
+
   const renderTask = (task) =>
     form === task.id ? (
       <TaskForm
@@ -117,7 +123,12 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
         onCancel={closeForm}
       />
     ) : (
-      <div key={task.id} className={`card card-hover p-3 ${task.completed ? 'opacity-60' : ''}`}>
+      <div
+        key={task.id}
+        className={`card card-hover p-3 transition-shadow ${task.completed ? 'opacity-60' : ''} ${
+          task.id === highlightId ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg' : ''
+        }`}
+      >
         <div className="flex items-start gap-2.5">
           <input
             type="checkbox"

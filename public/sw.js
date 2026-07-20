@@ -31,13 +31,21 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const url = event.notification.data?.url || '/'
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if ('focus' in client) return client.focus()
+  // A task reminder's tag is "task-<id>", so we can jump straight to that task
+  // without the payload carrying anything extra. If a window is already open we
+  // focus it and tell the app which task to surface; otherwise we open a deep link.
+  const tag = event.notification.tag || ''
+  const taskId = tag.startsWith('task-') ? tag.slice(5) : null
+  const url = taskId ? `/?task=${taskId}` : (event.notification.data?.url || '/')
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    for (const client of clients) {
+      if ('focus' in client) {
+        await client.focus()
+        if (taskId) client.postMessage({ type: 'open-task', taskId })
+        return
       }
-      return self.clients.openWindow(url)
-    }),
-  )
+    }
+    return self.clients.openWindow(url)
+  })())
 })
