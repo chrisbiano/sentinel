@@ -36,12 +36,63 @@ function to24Display(hhmm) {
   return `${h12}:${String(M || 0).padStart(2, '0')} ${ampm}`
 }
 
+// A minutes picker with presets + a "Custom…" number entry. Used for the
+// reminder's lead time and its repeat interval.
+function MinutesSelect({ label, suffix, value, onChange, presets }) {
+  const isPreset = presets.some(p => p.v === value)
+  const [custom, setCustom] = useState(!isPreset)
+  return (
+    <label className="flex flex-col gap-1 text-xs text-faint">
+      {label}
+      <div className="flex items-center gap-2">
+        <select
+          value={custom ? 'custom' : String(value)}
+          onChange={e => {
+            if (e.target.value === 'custom') { setCustom(true); onChange(value || presets[1]?.v || 15) }
+            else { setCustom(false); onChange(Number(e.target.value)) }
+          }}
+          className="input"
+        >
+          {presets.map(p => <option key={p.v} value={p.v}>{p.label}</option>)}
+          <option value="custom">Custom…</option>
+        </select>
+        {custom && (
+          <span className="flex items-center gap-1">
+            <input
+              type="number" min="1" step="1"
+              value={value}
+              onChange={e => onChange(Math.max(1, Number(e.target.value) || 1))}
+              className="input w-16"
+            />
+            <span className="text-faint">{suffix}</span>
+          </span>
+        )}
+      </div>
+    </label>
+  )
+}
+
+const LEAD_PRESETS = [
+  { v: 0, label: 'At start time' },
+  { v: 10, label: '10 min before' },
+  { v: 30, label: '30 min before' },
+  { v: 60, label: '1 hour before' },
+]
+const REPEAT_PRESETS = [
+  { v: 0, label: "Don't repeat" },
+  { v: 30, label: 'Every 30 min' },
+  { v: 60, label: 'Every 1 hour' },
+  { v: 120, label: 'Every 2 hours' },
+]
+
 export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
   const [title, setTitle] = useState(initial?.title || '')
   const [date, setDate] = useState(initial?.date || defaultDate)
   const [time, setTime] = useState(initial ? displayTo24(initial.time) : '09:00')
   const [duration, setDuration] = useState(initial?.duration ?? 30)
   const [hasReminder, setHasReminder] = useState(initial?.hasReminder ?? false)
+  const [reminderLeadMin, setReminderLeadMin] = useState(initial?.reminderLeadMin ?? 0)
+  const [reminderRepeatMin, setReminderRepeatMin] = useState(initial?.reminderRepeatMin ?? 0)
   const [unscheduled, setUnscheduled] = useState(initial ? !initial.date : false)
   // Repeats are chosen when creating; editing one occurrence doesn't reshape the series.
   const [recurrence, setRecurrence] = useState('')
@@ -80,6 +131,8 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
       duration: Number(duration) || 30,
       recurrence: resolvedRecurrence(),
       hasReminder,
+      reminderLeadMin: hasReminder ? reminderLeadMin : 0,
+      reminderRepeatMin: hasReminder ? reminderRepeatMin : 0,
       subtasks: subtasks
         .map(s => ({ ...s, title: s.title.trim() }))
         .filter(s => s.title),
@@ -146,6 +199,20 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
           Reminder
         </label>
       </div>
+      )}
+
+      {/* Reminder timing — when to first buzz, and whether to keep buzzing. */}
+      {!unscheduled && hasReminder && (
+        <div className="flex flex-wrap gap-3 rounded-xl border border-line2 bg-surface2/30 p-3">
+          <MinutesSelect
+            label="Remind me" suffix="min before"
+            value={reminderLeadMin} onChange={setReminderLeadMin} presets={LEAD_PRESETS}
+          />
+          <MinutesSelect
+            label="Repeat" suffix="min apart"
+            value={reminderRepeatMin} onChange={setReminderRepeatMin} presets={REPEAT_PRESETS}
+          />
+        </div>
       )}
 
       {!unscheduled && !isEditing && (

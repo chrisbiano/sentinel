@@ -152,7 +152,8 @@ export default function useTasks() {
     setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...data } : t)))
     const patch = { ...data }
     // If a reminder-relevant field changed, recompute when it fires and re-arm it.
-    if ('date' in data || 'time' in data || 'hasReminder' in data) {
+    if ('date' in data || 'time' in data || 'hasReminder' in data
+      || 'reminderLeadMin' in data || 'reminderRepeatMin' in data) {
       const cur = tasksRef.current.find(t => t.id === id)
       patch.remindAt = computeRemindAt({ ...cur, ...data })
       patch.reminderFiredAt = null

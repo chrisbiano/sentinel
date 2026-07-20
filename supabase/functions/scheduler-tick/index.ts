@@ -25,7 +25,8 @@ const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET')
 
 const BRIEF_MODEL = 'claude-haiku-4-5'   // cheap; it's a daily summary
 const BRIEF_HOUR = 7                       // 7am local
-const REMINDER_GRACE_MIN = 30              // fire reminders due within the last 30m
+const REMINDER_GRACE_MIN = 30              // first ping fires within 30m of due
+const REPEAT_WINDOW_MIN = 360              // stop repeating 6h after the first ping
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -57,19 +58,34 @@ async function sendToUser(admin: any, userId: string, payload: unknown) {
 /* ---------- reminders ---------- */
 async function fireReminders(admin: any) {
   const now = Date.now()
-  const { data: due } = await admin
+  // Candidates: reminders due, within the repeat window (so still-repeating ones
+  // are picked up). Whether each fires THIS minute is decided below.
+  const { data: cands } = await admin
     .from('tasks')
-    .select('id, user_id, title, time')
+    .select('id, user_id, title, time, remind_at, reminder_fired_at, reminder_repeat_min')
     .eq('has_reminder', true)
     .eq('completed', false)
-    .is('reminder_fired_at', null)
     .lte('remind_at', new Date(now).toISOString())
-    .gte('remind_at', new Date(now - REMINDER_GRACE_MIN * 60_000).toISOString())
+    .gte('remind_at', new Date(now - REPEAT_WINDOW_MIN * 60_000).toISOString())
   let fired = 0
-  for (const t of due ?? []) {
+  for (const t of cands ?? []) {
+    const ra = new Date(t.remind_at).getTime()
+    const firedAt = t.reminder_fired_at ? new Date(t.reminder_fired_at).getTime() : null
+    const repeat = (t.reminder_repeat_min || 0) * 60_000
+    let go = false
+    if (firedAt === null) {
+      // First ping — only within the grace window, so we don't fire one missed by
+      // hours because the tick was briefly down.
+      go = now - ra <= REMINDER_GRACE_MIN * 60_000
+    } else if (repeat > 0) {
+      // A repeat — every `repeat` min until done (completed ones filtered above)
+      // or the window closes.
+      go = now - firedAt >= repeat && now - ra < REPEAT_WINDOW_MIN * 60_000
+    }
+    if (!go) continue
     await sendToUser(admin, t.user_id, {
       title: `⏰ ${t.title}`,
-      body: t.time ? `Now — was due at ${t.time}` : 'Reminder',
+      body: t.time ? `Due at ${t.time}` : 'Reminder',
       tag: `task-${t.id}`,
       renotify: true,
       url: '/',

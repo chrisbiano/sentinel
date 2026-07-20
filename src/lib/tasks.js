@@ -20,6 +20,8 @@ export function rowToTask(row) {
     time: row.time,
     duration: row.duration,
     hasReminder: row.has_reminder,
+    reminderLeadMin: row.reminder_lead_min ?? 0,
+    reminderRepeatMin: row.reminder_repeat_min ?? 0,
     isUrgent: row.is_urgent,
     completed: row.completed,
     subtasks: row.subtasks || [],
@@ -37,7 +39,9 @@ export function computeRemindAt(task) {
   let h = Number(m[1]) % 12
   if (/pm/i.test(m[3])) h += 12
   const [Y, Mo, D] = String(task.date).split('-').map(Number)
-  return new Date(Y, Mo - 1, D, h, Number(m[2]), 0, 0).toISOString()   // local → UTC
+  const dt = new Date(Y, Mo - 1, D, h, Number(m[2]), 0, 0)   // local
+  dt.setMinutes(dt.getMinutes() - (Number(task.reminderLeadMin) || 0))   // fire N min early
+  return dt.toISOString()                                    // → UTC
 }
 
 export function taskToRow(task, userId) {
@@ -48,6 +52,8 @@ export function taskToRow(task, userId) {
     time: task.time ?? null,
     duration: task.duration ?? 30,
     has_reminder: task.hasReminder ?? false,
+    reminder_lead_min: task.reminderLeadMin ?? 0,
+    reminder_repeat_min: task.reminderRepeatMin ?? 0,
     is_urgent: task.isUrgent ?? false,
     completed: task.completed ?? false,
     subtasks: task.subtasks ?? [],
@@ -67,6 +73,8 @@ function patchToRow(patch) {
   if ('time' in patch) row.time = patch.time
   if ('duration' in patch) row.duration = patch.duration
   if ('hasReminder' in patch) row.has_reminder = patch.hasReminder
+  if ('reminderLeadMin' in patch) row.reminder_lead_min = patch.reminderLeadMin
+  if ('reminderRepeatMin' in patch) row.reminder_repeat_min = patch.reminderRepeatMin
   if ('isUrgent' in patch) row.is_urgent = patch.isUrgent
   if ('completed' in patch) row.completed = patch.completed
   if ('subtasks' in patch) row.subtasks = patch.subtasks
