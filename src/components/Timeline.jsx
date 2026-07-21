@@ -137,6 +137,15 @@ function SnoozeIcon() {
   )
 }
 
+function EditIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+      <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  )
+}
+
 // Minutes past midnight for a time label. Handles "2:00 PM", "2:00 p.m.", and
 // bare 24-hour "14:00". Anything unparseable sorts to the END of the day, never
 // the top — a broken time should sink, not leap above a real noon task.
@@ -203,6 +212,7 @@ export default function Timeline({
   const [draft, setDraft] = useState('')
   const [addingTask, setAddingTask] = useState(false)
   const [snoozeFor, setSnoozeFor] = useState(null)  // task id whose snooze picker is open
+  const [editingTask, setEditingTask] = useState(null)  // full task being edited in the form
 
   // Event handlers take the block's context, not just its id, so the saved note
   // stays readable even if the event later disappears from Google.
@@ -375,21 +385,24 @@ export default function Timeline({
             overlap
           </span>
         )}
-        {/* Reminder controls live here now that timed tasks are calendar-only:
-            an icon toggle for the bell, and a snooze once it's on. */}
-        {item.kind === 'task' && !item.done && onToggleReminder && (
+        {/* Task controls, now that timed tasks are calendar-only: reminder bell +
+            snooze (on active tasks), and Edit — the full form, where subtasks,
+            time, duration and reminder lead/repeat are set. */}
+        {item.kind === 'task' && (
           <span className="flex items-center gap-0.5">
-            <button
-              onClick={() => onToggleReminder(item.rawId)}
-              aria-label={item.hasReminder ? 'Turn reminder off' : 'Turn reminder on'}
-              title={item.hasReminder ? 'Reminder on' : 'Reminder off'}
-              className={`w-6 h-6 flex items-center justify-center rounded-md transition-colors ${
-                item.hasReminder ? 'text-fg bg-surface2' : 'text-faint hover:text-fg hover:bg-surface2'
-              }`}
-            >
-              <BellIcon off={!item.hasReminder} />
-            </button>
-            {item.hasReminder && onSnooze && (
+            {!item.done && onToggleReminder && (
+              <button
+                onClick={() => onToggleReminder(item.rawId)}
+                aria-label={item.hasReminder ? 'Turn reminder off' : 'Turn reminder on'}
+                title={item.hasReminder ? 'Reminder on' : 'Reminder off'}
+                className={`w-6 h-6 flex items-center justify-center rounded-md transition-colors ${
+                  item.hasReminder ? 'text-fg bg-surface2' : 'text-faint hover:text-fg hover:bg-surface2'
+                }`}
+              >
+                <BellIcon off={!item.hasReminder} />
+              </button>
+            )}
+            {!item.done && item.hasReminder && onSnooze && (
               <button
                 onClick={() => setSnoozeFor(snoozeFor === item.rawId ? null : item.rawId)}
                 aria-label="Snooze reminder"
@@ -399,6 +412,16 @@ export default function Timeline({
                 }`}
               >
                 <SnoozeIcon />
+              </button>
+            )}
+            {onUpdateTask && (
+              <button
+                onClick={() => setEditingTask(tasks.find(t => t.id === item.rawId) || null)}
+                aria-label="Edit task"
+                title="Edit"
+                className="w-6 h-6 flex items-center justify-center rounded-md text-faint hover:text-fg hover:bg-surface2 transition-colors"
+              >
+                <EditIcon />
               </button>
             )}
           </span>
@@ -713,6 +736,25 @@ export default function Timeline({
             onSave={(data) => { onAddTask(data); setAddingTask(false) }}
             onCancel={() => setAddingTask(false)}
           />
+        </div>
+      )}
+
+      {/* Edit a task in the full form — subtasks, time, duration, reminder lead/
+          repeat. Opened from a block's Edit button; a modal so the schedule
+          layout underneath stays put. */}
+      {editingTask && (
+        <div
+          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 bg-black/50 overflow-y-auto"
+          onClick={() => setEditingTask(null)}
+        >
+          <div onClick={e => e.stopPropagation()} className="w-full max-w-lg my-8">
+            <TaskForm
+              initial={editingTask}
+              defaultDate={defaultDate}
+              onSave={(data) => { onUpdateTask(editingTask.id, data); setEditingTask(null) }}
+              onCancel={() => setEditingTask(null)}
+            />
+          </div>
         </div>
       )}
     </section>
