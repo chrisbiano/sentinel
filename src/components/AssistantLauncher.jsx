@@ -40,10 +40,10 @@ export default function AssistantLauncher({ onParseTask, onAdd, defaultDate }) {
     <>
       <button
         onClick={() => { setError(null); setOpen(true) }}
-        aria-label="Quick add a task"
+        aria-label="Open A.I. assistant"
         className="fixed bottom-5 left-5 z-40 flex items-center gap-2 pl-3.5 pr-4 py-2.5 rounded-full bg-accent text-accent-fg text-sm font-medium shadow-lg shadow-black/30 hover:opacity-90 transition-opacity"
       >
-        <SparkleIcon /> Quick add
+        <SparkleIcon /> A.I. assistant
       </button>
 
       {/* Describe-it box */}
@@ -58,7 +58,7 @@ export default function AssistantLauncher({ onParseTask, onAdd, defaultDate }) {
             className="w-full max-w-lg bg-surface border border-line2 rounded-2xl shadow-xl p-4"
           >
             <div className="flex items-center gap-2 mb-2 text-sm font-medium text-fg">
-              <SparkleIcon /> Quick add
+              <SparkleIcon /> A.I. assistant
             </div>
             <textarea
               autoFocus
@@ -71,7 +71,7 @@ export default function AssistantLauncher({ onParseTask, onAdd, defaultDate }) {
             />
             {error && <p className="text-xs text-muted mt-2">{error}</p>}
             <div className="flex items-center justify-between gap-2 mt-3">
-              <span className="text-xs text-faint">Claude structures it — you confirm before it saves.</span>
+              <span className="text-xs text-faint">Your A.I. assistant constructs it — you confirm before it saves.</span>
               <div className="flex gap-2 shrink-0">
                 <button
                   type="button"
