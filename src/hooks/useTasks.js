@@ -149,7 +149,6 @@ export default function useTasks() {
   }, [])
 
   const updateTask = useCallback((id, data) => {
-    setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...data } : t)))
     const patch = { ...data }
     // If a reminder-relevant field changed, recompute when it fires and re-arm it.
     if ('date' in data || 'time' in data || 'hasReminder' in data
@@ -158,6 +157,10 @@ export default function useTasks() {
       patch.remindAt = computeRemindAt({ ...cur, ...data })
       patch.reminderFiredAt = null
     }
+    // Mirror the recomputed remindAt into local state too, so the snoozed-vs-
+    // scheduled check stays accurate without waiting for a reload.
+    const local = 'remindAt' in patch ? { ...data, remindAt: patch.remindAt } : data
+    setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...local } : t)))
     if (isSupabaseConfigured) updateTaskRow(id, patch).catch(e => console.error('Update failed:', e))
   }, [])
 
@@ -171,7 +174,7 @@ export default function useTasks() {
     if (!t) return
     const next = !t.hasReminder
     const remindAt = computeRemindAt({ ...t, hasReminder: next })
-    setTasks(prev => prev.map(x => (x.id === id ? { ...x, hasReminder: next } : x)))
+    setTasks(prev => prev.map(x => (x.id === id ? { ...x, hasReminder: next, remindAt } : x)))
     if (isSupabaseConfigured) {
       updateTaskRow(id, { hasReminder: next, remindAt, reminderFiredAt: null }).catch(e => console.error(e))
     }
@@ -189,6 +192,19 @@ export default function useTasks() {
     if (isSupabaseConfigured) {
       updateTaskRow(id, { hasReminder: true, remindAt: untilISO, reminderFiredAt: null })
         .catch(e => console.error('Snooze failed:', e))
+    }
+  }, [])
+
+  // Take back a snooze: restore the reminder to its natural scheduled fire time
+  // (from the task's own date/time/lead) and re-arm it.
+  const unsnoozeTask = useCallback((id) => {
+    const t = tasksRef.current.find(x => x.id === id)
+    if (!t) return
+    const remindAt = computeRemindAt(t)
+    setTasks(prev => prev.map(x => (x.id === id ? { ...x, remindAt, reminderFiredAt: null } : x)))
+    if (isSupabaseConfigured) {
+      updateTaskRow(id, { remindAt, reminderFiredAt: null })
+        .catch(e => console.error('Unsnooze failed:', e))
     }
   }, [])
 
@@ -211,6 +227,6 @@ export default function useTasks() {
   return {
     tasks, loading, error, clearError: () => setError(null),
     addTask, updateTask, deleteTask, deleteSeries, duplicateTask,
-    toggleReminder, snoozeTask, toggleComplete, toggleSubtask,
+    toggleReminder, snoozeTask, unsnoozeTask, toggleComplete, toggleSubtask,
   }
 }

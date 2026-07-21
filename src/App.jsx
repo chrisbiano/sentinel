@@ -33,6 +33,7 @@ export default function App() {
     duplicateTask,
     toggleReminder,
     snoozeTask,
+    unsnoozeTask,
     toggleComplete,
     toggleSubtask,
     error: taskError,
@@ -372,6 +373,7 @@ export default function App() {
               tasks={visibleTasks}
               onToggleReminder={toggleReminder}
               onSnooze={snoozeTask}
+              onUnsnooze={unsnoozeTask}
               onToggleComplete={toggleComplete}
               onAdd={addTask}
               onUpdate={updateTask}

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import SectionHeader from './SectionHeader'
 import TaskForm from './TaskForm'
 import { recurrenceLabel } from '../lib/recurrence'
+import { computeRemindAt } from '../lib/tasks'
 
 // Local-day ISO (YYYY-MM-DD), offset by `days`. Uses local time so "tomorrow"
 // is tomorrow in Chris's zone, not UTC's.
@@ -64,6 +65,24 @@ const SNOOZE_OPTS = [
   { key: 'eve', label: 'Evening', evening: true },
 ]
 const fmtTime = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+// "3:15 PM" if it's later today, "Mon 8:00 AM" if the snooze crossed into another day.
+const snoozeLabel = (iso) => {
+  const d = new Date(iso)
+  const midnight = (x) => { const y = new Date(x); y.setHours(0, 0, 0, 0); return y.getTime() }
+  const sameDay = midnight(d) === midnight(new Date())
+  return sameDay ? fmtTime(d) : `${d.toLocaleDateString([], { weekday: 'short' })} ${fmtTime(d)}`
+}
+// A reminder is "snoozed" when its stored fire time is in the future AND differs
+// from the task's natural scheduled time. Parse to ms (DB and computeRemindAt
+// format ISO differently) with a 60s tolerance so a normal reminder never counts.
+const isSnoozed = (task) => {
+  if (!task.hasReminder || !task.remindAt) return false
+  const ra = new Date(task.remindAt).getTime()
+  if (!(ra > Date.now())) return false
+  const natural = computeRemindAt(task)
+  const nat = natural ? new Date(natural).getTime() : null
+  return nat == null || Math.abs(ra - nat) > 60000
+}
 const snoozeTargetFor = (opt) => {
   const now = Date.now()
   if (opt.evening) {
@@ -110,26 +129,23 @@ function PlusIcon() {
   )
 }
 
-export default function TasksSection({ tasks, onToggleReminder, onSnooze, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, highlightId, defaultDate }) {
+export default function TasksSection({ tasks, onToggleReminder, onSnooze, onUnsnooze, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, highlightId, defaultDate }) {
   const [form, setForm] = useState(null) // null | 'new' | taskId
   const [confirmDelete, setConfirmDelete] = useState(null) // taskId of a repeating task
   const [dupFor, setDupFor] = useState(null)   // taskId whose "duplicate to…" picker is open
   const [dupDate, setDupDate] = useState('')   // chosen target day for the duplicate
   const [dupMsg, setDupMsg] = useState(null)   // { id, text } transient "duplicated to…" note
   const [snoozeFor, setSnoozeFor] = useState(null) // taskId whose snooze picker is open
-  const [snoozeMsg, setSnoozeMsg] = useState(null) // { id, text } transient "snoozed to…" note
   const [showCompleted, setShowCompleted] = useState(false)
 
   const closeForm = () => setForm(null)
 
-  // Push a reminder later and confirm the new time — the notification can't carry
-  // its own buttons on iOS, so snoozing lives here on the task instead.
+  // Push a reminder later. The notification can't carry its own buttons on iOS,
+  // so snoozing lives here — and the snoozed-to state stays on the card (with an
+  // Undo) rather than flashing by, so you can always see it's snoozed.
   const runSnooze = (task, opt) => {
-    const when = snoozeTargetFor(opt)
-    onSnooze(task.id, when.toISOString())
+    onSnooze(task.id, snoozeTargetFor(opt).toISOString())
     setSnoozeFor(null)
-    setSnoozeMsg({ id: task.id, text: `Snoozed to ${fmtTime(when)}` })
-    setTimeout(() => setSnoozeMsg(m => (m?.id === task.id ? null : m)), 3000)
   }
 
   // A duplicate can land on another day (which may not be the day in view), so
@@ -345,9 +361,18 @@ export default function TasksSection({ tasks, onToggleReminder, onSnooze, onTogg
           </div>
         )}
 
-        {snoozeMsg?.id === task.id && (
-          <div className="mt-3 pt-3 border-t border-line flex items-center gap-1.5 text-xs text-muted">
-            <SnoozeIcon /> {snoozeMsg.text}
+        {/* Persistent "this is snoozed" state, with a way to take it back. */}
+        {isSnoozed(task) && snoozeFor !== task.id && (
+          <div className="mt-3 pt-3 border-t border-line flex items-center justify-between gap-2">
+            <span className="text-xs text-muted flex items-center gap-1.5">
+              <SnoozeIcon /> Snoozed to {snoozeLabel(task.remindAt)}
+            </span>
+            <button
+              onClick={() => onUnsnooze(task.id)}
+              className="text-xs px-2 py-1 rounded-lg border border-line text-muted hover:text-fg hover:border-line2 transition-colors"
+            >
+              Undo
+            </button>
           </div>
         )}
 

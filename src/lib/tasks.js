@@ -22,6 +22,7 @@ export function rowToTask(row) {
     hasReminder: row.has_reminder,
     reminderLeadMin: row.reminder_lead_min ?? 0,
     reminderRepeatMin: row.reminder_repeat_min ?? 0,
+    remindAt: row.remind_at ?? null,   // so the UI can tell a snoozed reminder from a scheduled one
     isUrgent: row.is_urgent,
     completed: row.completed,
     subtasks: row.subtasks || [],
