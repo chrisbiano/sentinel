@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { RECURRENCE_OPTIONS, DAY_LABELS, encodeWeekly } from '../lib/recurrence'
 
 const uid = () => Math.random().toString(36).slice(2, 9)
@@ -41,6 +41,11 @@ function to24Display(hhmm) {
 function MinutesSelect({ label, suffix, value, onChange, presets }) {
   const isPreset = presets.some(p => p.v === value)
   const [custom, setCustom] = useState(!isPreset)
+  // The custom field keeps its own text so it can be emptied while you type a new
+  // number — clamping the number on every keystroke would trap the old digit and
+  // stop you erasing it. We push valid numbers up live and enforce the floor on blur.
+  const [draft, setDraft] = useState(String(value))
+  useEffect(() => { setDraft(String(value)) }, [value])
   return (
     <label className="flex flex-col gap-1 text-xs text-faint">
       {label}
@@ -60,8 +65,16 @@ function MinutesSelect({ label, suffix, value, onChange, presets }) {
           <span className="flex items-center gap-1">
             <input
               type="number" min="1" step="1"
-              value={value}
-              onChange={e => onChange(Math.max(1, Number(e.target.value) || 1))}
+              value={draft}
+              onChange={e => {
+                setDraft(e.target.value)                 // may be empty mid-edit
+                const n = Number(e.target.value)
+                if (e.target.value !== '' && Number.isFinite(n) && n >= 1) onChange(n)
+              }}
+              onBlur={() => {                            // settle on a valid number
+                const n = Math.max(1, Math.round(Number(draft) || 1))
+                setDraft(String(n)); onChange(n)
+              }}
               className="input w-16"
             />
             <span className="text-faint">{suffix}</span>
@@ -74,6 +87,7 @@ function MinutesSelect({ label, suffix, value, onChange, presets }) {
 
 const LEAD_PRESETS = [
   { v: 0, label: 'At start time' },
+  { v: 5, label: '5 min before' },
   { v: 10, label: '10 min before' },
   { v: 30, label: '30 min before' },
   { v: 60, label: '1 hour before' },
