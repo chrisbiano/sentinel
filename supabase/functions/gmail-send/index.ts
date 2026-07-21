@@ -113,13 +113,45 @@ function escapeHtml(s: string): string {
 const findHeader = (headers: any[], name: string) =>
   headers?.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value ?? ''
 
+// Split an address header into individual { raw, email }. Keeps the "Name <email>"
+// form for display and lowercases the email for dedup/exclusion. Good enough for
+// the commas Gmail emits (a quoted "Last, First" name may lose its display half,
+// but the email — all we key on — survives).
+function parseAddresses(header: string) {
+  return (header || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((raw) => {
+      const m = raw.match(/<([^>]+)>/)
+      const email = (m ? m[1] : raw).trim().toLowerCase()
+      return { raw, email }
+    })
+    .filter((a) => a.email.includes('@'))
+}
+
+// Reply-all recipients: everyone on the original's To + Cc, minus the person
+// we're replying to (they go in To) and minus our own address. Deduped by email.
+function replyAllCc(toHeader: string, ccHeader: string, replyToEmail: string, selfEmail: string) {
+  const exclude = new Set([replyToEmail, selfEmail].filter(Boolean).map((e) => e.toLowerCase()))
+  const seen = new Set<string>()
+  return [...parseAddresses(toHeader), ...parseAddresses(ccHeader)]
+    .filter((a) => {
+      if (exclude.has(a.email) || seen.has(a.email)) return false
+      seen.add(a.email)
+      return true
+    })
+    .map((a) => a.raw)
+    .join(', ')
+}
+
 /* ---------- Gmail lookups ---------- */
 
 // The original message's threading + reply target. We stored the Gmail id and
 // thread id, but not the RFC Message-ID, so re-fetch just the headers we need.
 async function originalContext(token: string, gmailId: string) {
   const params = new URLSearchParams({ format: 'metadata' })
-  for (const h of ['Message-ID', 'References', 'Subject', 'From', 'Reply-To'])
+  for (const h of ['Message-ID', 'References', 'Subject', 'From', 'Reply-To', 'To', 'Cc'])
     params.append('metadataHeaders', h)
   const r = await fetchT(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages/${gmailId}?${params}`,
@@ -134,6 +166,8 @@ async function originalContext(token: string, gmailId: string) {
     messageId: findHeader(h, 'Message-ID'),         // for In-Reply-To / References
     references: findHeader(h, 'References'),
     replyTo: findHeader(h, 'Reply-To') || findHeader(h, 'From'),
+    to: findHeader(h, 'To'),                         // for reply-all
+    cc: findHeader(h, 'Cc'),
     subject: /^re:/i.test(subject) ? subject : `Re: ${subject}`,
   }
 }
@@ -321,18 +355,21 @@ Deno.serve(async (req) => {
     ? `${encodeHeader(identity.displayName)} <${accountEmail}>`
     : accountEmail
 
-  // Preview: hand the modal everything it needs to show what will go out.
+  // Preview: hand the modal everything it needs to show what will go out —
+  // including the reply-all Cc list, so the modal can offer "Reply all".
   if (mode === 'preview') {
+    const replyToEmail = parseAddresses(ctx.replyTo)[0]?.email ?? ''
     return json({
       from: identity.displayName ? `${identity.displayName} <${accountEmail}>` : accountEmail,
       to: ctx.replyTo,
+      cc: replyAllCc(ctx.to, ctx.cc, replyToEmail, accountEmail),
       subject: ctx.subject,
       signatureHtml: identity.signature,
     })
   }
 
-  // Send.
-  const { to, subject, text } = body
+  // Send. `cc` is present only when Chris chose Reply all (he can edit it).
+  const { to, cc, subject, text } = body
   if (!to || typeof text !== 'string') {
     return json({ error: 'Expected { to, subject, text } to send' }, 400)
   }
@@ -348,6 +385,7 @@ Deno.serve(async (req) => {
   const headerLines = [
     `From: ${fromHeader}`,
     `To: ${to}`,
+    cc ? `Cc: ${cc}` : '',
     `Subject: ${encodeHeader(subject || ctx.subject)}`,
     ctx.messageId ? `In-Reply-To: ${ctx.messageId}` : '',
     references ? `References: ${references}` : '',

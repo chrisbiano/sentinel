@@ -24,6 +24,8 @@ export default function ComposeModal({ email, onClose, onSent }) {
   const [loading, setLoading] = useState(true)
   const [prefill, setPrefill] = useState(null)   // { from, to, subject, signatureHtml }
   const [to, setTo] = useState('')
+  const [cc, setCc] = useState('')               // reply-all recipients (editable)
+  const [replyAll, setReplyAll] = useState(false)
   const [subject, setSubject] = useState('')
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -58,6 +60,7 @@ export default function ComposeModal({ email, onClose, onSent }) {
         } else {
           setPrefill(data)
           setTo(data.to || '')
+          setCc(data.cc || '')
           setSubject(data.subject || '')
         }
       } catch (e) {
@@ -110,6 +113,7 @@ export default function ComposeModal({ email, onClose, onSent }) {
         accountEmail: email.account_email,
         mode: 'send',
         to, subject, text,
+        cc: replyAll ? cc : '',   // only when Reply all is on
       },
     })
     if (fnError || data?.error) {
@@ -169,6 +173,40 @@ export default function ComposeModal({ email, onClose, onSent }) {
                   className="input flex-1 py-1 text-sm"
                 />
               </div>
+
+              {/* Reply all — only offered when the original had other recipients.
+                  Off by default (reply to the sender); turning it on reveals the
+                  Cc so you can see and trim exactly who else gets it. */}
+              {prefill.cc && (
+                <>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xs text-faint w-14 shrink-0" />
+                    <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={replyAll}
+                        onChange={e => setReplyAll(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded bg-surface2 border-line2 text-accent focus:ring-0 focus:ring-offset-0"
+                      />
+                      Reply all
+                      <span className="text-faint">
+                        · also Cc {prefill.cc.split(',').filter(s => s.trim()).length} other{prefill.cc.split(',').filter(s => s.trim()).length === 1 ? '' : 's'}
+                      </span>
+                    </label>
+                  </div>
+                  {replyAll && (
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xs text-faint w-14 shrink-0">Cc</span>
+                      <input
+                        value={cc}
+                        onChange={e => setCc(e.target.value)}
+                        className="input flex-1 py-1 text-sm"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
               <div className="flex items-baseline gap-2">
                 <span className="text-xs text-faint w-14 shrink-0">Subject</span>
                 <input
