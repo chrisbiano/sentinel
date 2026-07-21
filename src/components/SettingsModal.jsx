@@ -17,10 +17,22 @@ function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, o
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState(null)
   const [error, setError] = useState(null)
+  // The brief-time picker commits on an explicit Save (not on every keystroke) so
+  // a save is unmistakable. `timeDraft` holds the pending value; it re-syncs when
+  // the saved value loads or changes.
+  const [timeDraft, setTimeDraft] = useState(briefTime)
+  const [savedNote, setSavedNote] = useState(false)
 
   useEffect(() => {
     currentSubscription().then(sub => setEnabled(Boolean(sub))).catch(() => {})
   }, [])
+  useEffect(() => { setTimeDraft(briefTime) }, [briefTime])
+
+  const saveBriefTime = () => {
+    onBriefTimeChange(timeDraft)
+    setSavedNote(true)
+    setTimeout(() => setSavedNote(false), 2500)
+  }
 
   if (!isPushConfigured) return null
 
@@ -121,14 +133,32 @@ function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, o
                 <Toggle checked={morningBrief} onChange={onMorningBriefChange} />
               </div>
               {morningBrief && onBriefTimeChange && (
-                <div className="flex items-center justify-between gap-4 mt-3">
-                  <p className="text-sm text-muted">Send at</p>
-                  <input
-                    type="time"
-                    value={briefTime}
-                    onChange={e => onBriefTimeChange(e.target.value)}
-                    className="input py-1 text-sm w-36"
-                  />
+                <div className="mt-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-muted">Send at</p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <input
+                        type="time"
+                        value={timeDraft}
+                        onChange={e => setTimeDraft(e.target.value)}
+                        className="input py-1 text-sm w-36"
+                      />
+                      <button
+                        onClick={saveBriefTime}
+                        disabled={timeDraft === briefTime}
+                        className={`px-3 py-1.5 text-sm rounded-lg font-medium shrink-0 transition-opacity ${
+                          timeDraft !== briefTime
+                            ? 'bg-accent text-accent-fg hover:opacity-90'
+                            : 'border border-line2 text-faint opacity-50'
+                        }`}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                  {savedNote && timeDraft === briefTime && (
+                    <p className="text-xs text-faint mt-1.5">Saved ✓ — the brief will send at this time.</p>
+                  )}
                 </div>
               )}
               {!enabled && (
