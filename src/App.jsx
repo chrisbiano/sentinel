@@ -18,7 +18,9 @@ import EmailSection from './components/EmailSection'
 import TasksSection from './components/TasksSection'
 import SettingsModal from './components/SettingsModal'
 import AssistantLauncher from './components/AssistantLauncher'
+import MorningBriefCard from './components/MorningBriefCard'
 import UndoToast from './components/UndoToast'
+import useMorningBrief from './hooks/useMorningBrief'
 
 const SETTINGS_KEY = 'sentinel.settings.v1'
 const defaultSettings = { hideCompleted: false }
@@ -43,6 +45,10 @@ export default function App() {
   // Captures the browser timezone (so the morning brief lands at 7am local) and
   // holds the brief on/off toggle.
   const { morningBrief, setMorningBrief, briefTime, setBriefTime } = useUserPrefs()
+
+  // The morning brief lives as a card at the top of the dashboard until dismissed.
+  const { brief, loading: briefLoading, show: showBrief, dismiss: dismissBrief } =
+    useMorningBrief({ enabled: morningBrief, briefTime })
 
   const [settings, setSettings] = useState(() => {
     try {
@@ -242,6 +248,11 @@ export default function App() {
   return (
     <Layout onOpenSettings={() => setSettingsOpen(true)}>
       <main className="space-y-6">
+        {/* Morning brief — pinned at the very top until dismissed. */}
+        {showBrief && (
+          <MorningBriefCard brief={brief} loading={briefLoading} onDismiss={dismissBrief} />
+        )}
+
         {/* A save that failed should say so, not quietly vanish */}
         {taskError && (
           <div className="card card-border-accent flex items-center justify-between gap-4">

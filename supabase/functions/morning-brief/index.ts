@@ -1,0 +1,129 @@
+// Sentinel — generate today's morning brief for the signed-in user, on demand.
+// The app shows it as a dismissible card at the top of the dashboard (it lives
+// there until dismissed), so the brief never depends on push delivery.
+//
+// Deploy with "Verify JWT" ON. Reuses the scheduler's secrets:
+//   ANTHROPIC_API_KEY, SUPABASE_SERVICE_ROLE_KEY,
+//   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (for the day's calendar).
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import Anthropic from 'npm:@anthropic-ai/sdk'
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
+const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')
+const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID')
+const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET')
+const MODEL = 'claude-haiku-4-5'
+
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
+
+async function fetchT(url: string, opts: RequestInit = {}, ms = 10000) {
+  try { return await fetch(url, { ...opts, signal: AbortSignal.timeout(ms) }) } catch { return null }
+}
+
+async function freshAccessToken(admin: any, account: any) {
+  const { data: tok } = await admin.from('account_tokens').select('*').eq('account_id', account.id).single()
+  if (!tok) return null
+  if (tok.access_token && tok.expires_at && new Date(tok.expires_at).getTime() > Date.now() + 60_000) return tok.access_token
+  const res = await fetchT('https://oauth2.googleapis.com/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: CLIENT_ID!, client_secret: CLIENT_SECRET!, refresh_token: tok.refresh_token, grant_type: 'refresh_token' }),
+  })
+  const j = res ? await res.json() : null
+  if (!res || !res.ok || !j?.access_token) return null
+  await admin.from('account_tokens').update({
+    access_token: j.access_token,
+    expires_at: new Date(Date.now() + (j.expires_in ?? 3600) * 1000).toISOString(),
+  }).eq('account_id', account.id)
+  return j.access_token
+}
+
+// Best-effort: the day's event titles + times across the user's calendars.
+async function eventsToday(admin: any, userId: string, localDate: string, tz: string) {
+  try {
+    const start = new Date(`${localDate}T00:00:00`)
+    const timeMin = new Date(start).toISOString()
+    const timeMax = new Date(start.getTime() + 86_400_000).toISOString()
+    const { data: accounts } = await admin
+      .from('connected_accounts').select('id, email').eq('user_id', userId).eq('provider', 'google')
+    const per = await Promise.all((accounts ?? []).map(async (acct: any) => {
+      const token = await freshAccessToken(admin, acct)
+      if (!token) return []
+      const auth = { Authorization: `Bearer ${token}` }
+      const calRes = await fetchT('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader', { headers: auth })
+      if (!calRes || !calRes.ok) return []
+      const cals = ((await calRes.json()).items ?? []).filter((c: any) => c.selected !== false)
+      const evs = await Promise.all(cals.map(async (cal: any) => {
+        const params = new URLSearchParams({ timeMin, timeMax, singleEvents: 'true', orderBy: 'startTime', maxResults: '25' })
+        const r = await fetchT(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?${params}`, { headers: auth })
+        if (!r || !r.ok) return []
+        return ((await r.json()).items ?? [])
+          .filter((e: any) => e.status !== 'cancelled' && e.start?.dateTime)
+          .map((e: any) => {
+            const t = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(new Date(e.start.dateTime))
+            return `${t} — ${e.summary || '(no title)'}`
+          })
+      }))
+      return evs.flat()
+    }))
+    return per.flat().slice(0, 12)
+  } catch { return [] }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+
+  const jwt = (req.headers.get('Authorization') || '').replace('Bearer ', '')
+  const admin = createClient(SUPABASE_URL!, SERVICE_ROLE!)
+  const { data: u, error: uErr } = await admin.auth.getUser(jwt)
+  if (uErr || !u?.user) return json({ error: 'unauthorized' }, 401)
+  if (!ANTHROPIC_API_KEY) return json({ error: 'ANTHROPIC_API_KEY is not set on this function' }, 500)
+
+  const userId = u.user.id
+  let body: any = {}
+  try { body = await req.json() } catch { /* none */ }
+  const tz = body.tz || 'UTC'
+  const date = body.today || new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date())
+
+  const { data: tasks } = await admin
+    .from('tasks').select('title, time, completed').eq('user_id', userId).eq('date', date)
+  const openTasks = (tasks ?? []).filter((t: any) => !t.completed)
+  const { count: needReply } = await admin
+    .from('email_verdicts').select('*', { count: 'exact', head: true })
+    .eq('user_id', userId).eq('action', 'reply').is('handled_at', null)
+  const events = await eventsToday(admin, userId, date, tz)
+
+  const facts = [
+    `Today's date: ${date}.`,
+    events.length ? `Calendar today:\n${events.map((e) => `- ${e}`).join('\n')}` : 'Calendar today: nothing scheduled.',
+    openTasks.length
+      ? `Open tasks today:\n${openTasks.map((t: any) => `- ${t.title}${t.time ? ` (${t.time})` : ''}`).join('\n')}`
+      : 'Open tasks today: none.',
+    `Emails needing a reply: ${needReply ?? 0}.`,
+  ].join('\n\n')
+
+  let brief = ''
+  try {
+    const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY })
+    const res = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 400,
+      system: `You write Chris's one-glance morning brief for Sentinel, his daily command center. He runs a video production company and plays in a band. Given the day's facts, write 2–4 short sentences (or tight lines) that tell him what matters today: the shape of his schedule, anything time-sensitive, and what's waiting on him. Warm, direct, concrete — name the actual things. No greeting like "Good morning", no filler, no markdown headers. If the day is light, say so briefly. Plain text only.`,
+      messages: [{ role: 'user', content: facts }],
+    })
+    brief = (res.content.find((b: any) => b.type === 'text')?.text ?? '').trim()
+  } catch (e) {
+    console.error('brief generation failed', (e as Error).message)
+  }
+  if (!brief) {
+    brief = `${events.length} event${events.length === 1 ? '' : 's'}, ${openTasks.length} task${openTasks.length === 1 ? '' : 's'}, and ${needReply ?? 0} email${(needReply ?? 0) === 1 ? '' : 's'} to reply to.`
+  }
+
+  return json({ brief, date })
+})
