@@ -33,6 +33,7 @@ export default function App() {
     deleteTask,
     deleteSeries,
     duplicateTask,
+    reorderTasks,
     toggleReminder,
     snoozeTask,
     unsnoozeTask,
@@ -402,6 +403,7 @@ export default function App() {
               onDelete={deleteTask}
               onDeleteSeries={deleteSeries}
               onDuplicate={duplicateTask}
+              onReorder={reorderTasks}
               highlightId={highlightTaskId}
               defaultDate={selectedISO}
             />

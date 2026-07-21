@@ -1,4 +1,11 @@
 import { useState, useEffect } from 'react'
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors,
+} from '@dnd-kit/core'
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import SectionHeader from './SectionHeader'
 import TaskForm from './TaskForm'
 import { recurrenceLabel } from '../lib/recurrence'
@@ -93,7 +100,25 @@ function PlusIcon() {
   )
 }
 
-export default function TasksSection({ tasks, onToggleReminder, onSnooze, onUnsnooze, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, highlightId, defaultDate }) {
+function GripIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+      <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
+      <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
+      <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
+    </svg>
+  )
+}
+
+// Wraps a task card so it can be dragged. Hands the card its ref/style and a
+// drag-handle (spread onto the grip) via a render prop.
+function SortableTaskItem({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
+  return children({ setNodeRef, style, dragHandle: { ...attributes, ...listeners } })
+}
+
+export default function TasksSection({ tasks, onToggleReminder, onSnooze, onUnsnooze, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, onReorder, highlightId, defaultDate }) {
   const [form, setForm] = useState(null) // null | 'new' | taskId
   const [confirmDelete, setConfirmDelete] = useState(null) // taskId of a repeating task
   const [dupFor, setDupFor] = useState(null)   // taskId whose "duplicate to…" picker is open
@@ -101,6 +126,12 @@ export default function TasksSection({ tasks, onToggleReminder, onSnooze, onUnsn
   const [dupMsg, setDupMsg] = useState(null)   // { id, text } transient "duplicated to…" note
   const [snoozeFor, setSnoozeFor] = useState(null) // taskId whose snooze picker is open
   const [showCompleted, setShowCompleted] = useState(false)
+
+  // Press-and-move on the grip drags; a tap/click elsewhere doesn't start a drag.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } }),
+  )
 
   const closeForm = () => setForm(null)
 
@@ -121,10 +152,19 @@ export default function TasksSection({ tasks, onToggleReminder, onSnooze, onUnsn
     setTimeout(() => setDupMsg(m => (m?.id === task.id ? null : m)), 3000)
   }
 
-  // Checked-off tasks drop out of the active list into their own collapsed
+  // Sort by the drag-reordered position (stable, so unset/equal keep their
+  // creation order). Checked-off tasks then drop into their own collapsed
   // "Completed" group, so a done item never reads like a fresh standalone task.
-  const active = tasks.filter(t => !t.completed)
-  const completed = tasks.filter(t => t.completed)
+  const ordered = [...tasks].sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity))
+  const active = ordered.filter(t => !t.completed)
+  const completed = ordered.filter(t => t.completed)
+
+  const onDragEnd = ({ active: dragged, over }) => {
+    if (!over || dragged.id === over.id) return
+    const from = active.findIndex(t => t.id === dragged.id)
+    const to = active.findIndex(t => t.id === over.id)
+    if (from !== -1 && to !== -1) onReorder(arrayMove(active, from, to).map(t => t.id))
+  }
 
   // If a reminder deep-links to a done task, open the Completed group so the
   // highlight is actually visible.
@@ -132,7 +172,7 @@ export default function TasksSection({ tasks, onToggleReminder, onSnooze, onUnsn
     if (highlightId && completed.some(t => t.id === highlightId)) setShowCompleted(true)
   }, [highlightId, completed])
 
-  const renderTask = (task) =>
+  const renderTask = (task, dragHandle) =>
     form === task.id ? (
       <TaskForm
         key={task.id}
@@ -149,6 +189,15 @@ export default function TasksSection({ tasks, onToggleReminder, onSnooze, onUnsn
         }`}
       >
         <div className="flex items-start gap-2.5">
+          {dragHandle && (
+            <button
+              {...dragHandle}
+              aria-label="Drag to reorder"
+              className="mt-0.5 text-faint hover:text-muted cursor-grab active:cursor-grabbing touch-none shrink-0"
+            >
+              <GripIcon />
+            </button>
+          )}
           <input
             type="checkbox"
             checked={task.completed}
@@ -394,7 +443,23 @@ export default function TasksSection({ tasks, onToggleReminder, onSnooze, onUnsn
           />
         )}
 
-        {active.map(renderTask)}
+        {onReorder ? (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+            <SortableContext items={active.map(t => t.id)} strategy={verticalListSortingStrategy}>
+              {active.map(task => (
+                <SortableTaskItem key={task.id} id={task.id}>
+                  {({ setNodeRef, style, dragHandle }) => (
+                    <div ref={setNodeRef} style={style}>
+                      {renderTask(task, form === task.id ? null : dragHandle)}
+                    </div>
+                  )}
+                </SortableTaskItem>
+              ))}
+            </SortableContext>
+          </DndContext>
+        ) : (
+          active.map(t => renderTask(t))
+        )}
       </div>
 
       {active.length === 0 && completed.length === 0 && form !== 'new' && (
@@ -416,7 +481,7 @@ export default function TasksSection({ tasks, onToggleReminder, onSnooze, onUnsn
           </button>
           {showCompleted && (
             <div className="space-y-2 mt-3">
-              {completed.map(renderTask)}
+              {completed.map(t => renderTask(t))}
             </div>
           )}
         </div>

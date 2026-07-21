@@ -23,6 +23,7 @@ export function rowToTask(row) {
     reminderLeadMin: row.reminder_lead_min ?? 0,
     reminderRepeatMin: row.reminder_repeat_min ?? 0,
     remindAt: row.remind_at ?? null,   // so the UI can tell a snoozed reminder from a scheduled one
+    position: row.position ?? null,    // drag-reordered slot in the list (null = unset)
     isUrgent: row.is_urgent,
     completed: row.completed,
     subtasks: row.subtasks || [],
@@ -83,6 +84,7 @@ function patchToRow(patch) {
   // task) and passed through explicitly when a reminder-relevant field changes.
   if ('remindAt' in patch) row.remind_at = patch.remindAt
   if ('reminderFiredAt' in patch) row.reminder_fired_at = patch.reminderFiredAt
+  if ('position' in patch) row.position = patch.position
   return row
 }
 

@@ -169,6 +169,18 @@ export default function useTasks() {
     if (isSupabaseConfigured) deleteTaskRow(id).catch(e => console.error('Delete failed:', e))
   }, [])
 
+  // Persist a drag-reorder of the task list: give the reordered ids sequential
+  // positions (the list sorts by position), and write each row.
+  const reorderTasks = useCallback((orderedIds) => {
+    const posById = new Map(orderedIds.map((id, i) => [id, i]))
+    setTasks(prev => prev.map(t => (posById.has(t.id) ? { ...t, position: posById.get(t.id) } : t)))
+    if (isSupabaseConfigured) {
+      orderedIds.forEach((id, i) => {
+        updateTaskRow(id, { position: i }).catch(e => console.error('Reorder failed:', e))
+      })
+    }
+  }, [])
+
   const toggleReminder = useCallback((id) => {
     const t = tasksRef.current.find(x => x.id === id)
     if (!t) return
@@ -226,7 +238,7 @@ export default function useTasks() {
 
   return {
     tasks, loading, error, clearError: () => setError(null),
-    addTask, updateTask, deleteTask, deleteSeries, duplicateTask,
+    addTask, updateTask, deleteTask, deleteSeries, duplicateTask, reorderTasks,
     toggleReminder, snoozeTask, unsnoozeTask, toggleComplete, toggleSubtask,
   }
 }
