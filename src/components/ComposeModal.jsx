@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+
+const MAX_ATTACH_BYTES = 10 * 1024 * 1024   // 10 MB total, before base64
 
 function SparkleIcon() {
   return (
@@ -8,6 +10,28 @@ function SparkleIcon() {
     </svg>
   )
 }
+
+function PaperclipIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  )
+}
+
+const formatBytes = (n) =>
+  n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`
+
+// Read a File as raw base64 (strip the data: URL prefix). Null on failure.
+const readFileB64 = (file) =>
+  new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () =>
+      resolve({ name: file.name, size: file.size, type: file.type || 'application/octet-stream', dataB64: String(reader.result).split(',')[1] || '' })
+    reader.onerror = () => resolve(null)
+    reader.readAsDataURL(file)
+  })
 
 /* Reply to an email as Chris, in a Gmail-style composer.
  *
@@ -33,6 +57,9 @@ export default function ComposeModal({ email, onClose, onSent }) {
   const [intent, setIntent] = useState('')       // one-line note for the AI draft
   const [drafting, setDrafting] = useState(false)
   const [showOriginal, setShowOriginal] = useState(false)   // "in reply to" quote
+  const [attachments, setAttachments] = useState([])        // { name, size, type, dataB64 }
+  const [attachError, setAttachError] = useState(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
@@ -104,6 +131,23 @@ export default function ComposeModal({ email, onClose, onSent }) {
     setDrafting(false)
   }
 
+  const pickFiles = async (e) => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''                  // let the same file be re-picked later
+    if (!files.length) return
+    setAttachError(null)
+    const read = (await Promise.all(files.map(readFileB64))).filter(Boolean)
+    const current = attachments.reduce((s, a) => s + a.size, 0)
+    const added = read.reduce((s, a) => s + a.size, 0)
+    if (current + added > MAX_ATTACH_BYTES) {
+      setAttachError('Attachments must total under 10 MB.')
+      return
+    }
+    setAttachments(prev => [...prev, ...read])
+  }
+  const removeAttachment = (i) =>
+    setAttachments(prev => prev.filter((_, idx) => idx !== i))
+
   const send = async () => {
     if (!text.trim() || sending) return
     setSending(true); setError(null)
@@ -114,6 +158,7 @@ export default function ComposeModal({ email, onClose, onSent }) {
         mode: 'send',
         to, subject, text,
         cc: replyAll ? cc : '',   // only when Reply all is on
+        attachments: attachments.map(a => ({ filename: a.name, mimeType: a.type, dataB64: a.dataB64 })),
       },
     })
     if (fnError || data?.error) {
@@ -277,6 +322,40 @@ export default function ComposeModal({ email, onClose, onSent }) {
                 placeholder="Write your reply, or use Draft above…"
                 className="input w-full text-sm resize-none"
               />
+
+              {/* Attachments — up to 10 MB total, sent with the reply. */}
+              <div className="mt-2">
+                <input ref={fileInputRef} type="file" multiple onChange={pickFiles} className="hidden" />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 text-xs text-faint hover:text-fg transition-colors"
+                >
+                  <PaperclipIcon /> Attach files
+                </button>
+                {attachError && <p className="text-xs text-muted mt-1.5">{attachError}</p>}
+                {attachments.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {attachments.map((a, i) => (
+                      <span
+                        key={i}
+                        className="flex items-center gap-1.5 text-xs bg-surface2 border border-line2 rounded-lg pl-2.5 pr-1.5 py-1"
+                      >
+                        <PaperclipIcon />
+                        <span className="text-fg truncate max-w-[11rem]">{a.name}</span>
+                        <span className="text-faint tabular-nums">{formatBytes(a.size)}</span>
+                        <button
+                          onClick={() => removeAttachment(i)}
+                          aria-label={`Remove ${a.name}`}
+                          className="w-5 h-5 flex items-center justify-center rounded text-faint hover:text-fg hover:bg-surface transition-colors"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* The real signature, exactly as it will send. Rendered, not
                   editable — this is the "it's really there" proof Chris wanted. */}

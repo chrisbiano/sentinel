@@ -89,10 +89,15 @@ function b64Body(s: string): string {
 }
 
 // URL-safe base64 with no padding, for the raw message Gmail's API wants.
+// Chunked so a big message (with attachments) doesn't build a huge string
+// one char at a time.
 function b64url(s: string): string {
   const bytes = utf8(s)
   let bin = ''
-  for (const b of bytes) bin += String.fromCharCode(b)
+  const CHUNK = 0x8000
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  }
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
@@ -368,11 +373,21 @@ Deno.serve(async (req) => {
     })
   }
 
-  // Send. `cc` is present only when Chris chose Reply all (he can edit it).
-  const { to, cc, subject, text } = body
+  // Send. `cc` is present only when Chris chose Reply all (he can edit it);
+  // `attachments` is present only when he attached files.
+  const { to, cc, subject, text, attachments } = body
   if (!to || typeof text !== 'string') {
     return json({ error: 'Expected { to, subject, text } to send' }, 400)
   }
+  const atts = Array.isArray(attachments)
+    ? attachments.filter((a: any) => a?.dataB64 && a?.filename)
+    : []
+  // Guard the total size server-side too (base64 of ~10MB ≈ 14MB of text).
+  const attBytes = atts.reduce((n: number, a: any) => n + String(a.dataB64).length, 0)
+  if (attBytes > 15 * 1024 * 1024) {
+    return json({ error: 'Attachments are too large (10 MB max).' }, 413)
+  }
+
   // Insufficient scope here almost always means the account hasn't been
   // reconnected since gmail.send was added — say so plainly.
   const typed = escapeHtml(text).replace(/\n/g, '<br>')
@@ -382,7 +397,7 @@ Deno.serve(async (req) => {
 
   const references = [ctx.references, ctx.messageId].filter(Boolean).join(' ')
 
-  const headerLines = [
+  const baseHeaders = [
     `From: ${fromHeader}`,
     `To: ${to}`,
     cc ? `Cc: ${cc}` : '',
@@ -390,11 +405,37 @@ Deno.serve(async (req) => {
     ctx.messageId ? `In-Reply-To: ${ctx.messageId}` : '',
     references ? `References: ${references}` : '',
     'MIME-Version: 1.0',
-    'Content-Type: text/html; charset="UTF-8"',
-    'Content-Transfer-Encoding: base64',
   ].filter(Boolean)
 
-  const mime = headerLines.join('\r\n') + '\r\n\r\n' + b64Body(html)
+  let mime: string
+  if (atts.length) {
+    // multipart/mixed: the HTML reply, then each file as a base64 attachment.
+    const boundary = `b_${crypto.randomUUID().replace(/-/g, '')}`
+    let parts =
+      `--${boundary}\r\n` +
+      'Content-Type: text/html; charset="UTF-8"\r\n' +
+      'Content-Transfer-Encoding: base64\r\n\r\n' +
+      b64Body(html) + '\r\n'
+    for (const a of atts) {
+      const fname = String(a.filename).replace(/["\r\n]/g, '')
+      const ctype = String(a.mimeType || 'application/octet-stream').replace(/[\r\n]/g, '')
+      const wrapped = (String(a.dataB64).match(/.{1,76}/g) ?? []).join('\r\n')
+      parts +=
+        `--${boundary}\r\n` +
+        `Content-Type: ${ctype}; name="${encodeHeader(fname)}"\r\n` +
+        `Content-Disposition: attachment; filename="${encodeHeader(fname)}"\r\n` +
+        'Content-Transfer-Encoding: base64\r\n\r\n' +
+        wrapped + '\r\n'
+    }
+    parts += `--${boundary}--`
+    mime = [...baseHeaders, `Content-Type: multipart/mixed; boundary="${boundary}"`].join('\r\n') +
+      '\r\n\r\n' + parts
+  } else {
+    mime = [...baseHeaders,
+      'Content-Type: text/html; charset="UTF-8"',
+      'Content-Transfer-Encoding: base64',
+    ].join('\r\n') + '\r\n\r\n' + b64Body(html)
+  }
 
   const sendRes = await fetch(
     'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
