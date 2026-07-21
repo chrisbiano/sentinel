@@ -24,7 +24,7 @@ const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID')
 const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET')
 
 const BRIEF_MODEL = 'claude-haiku-4-5'   // cheap; it's a daily summary
-const BRIEF_HOUR = 7                       // 7am local
+const BRIEF_WINDOW_MIN = 4                  // fire within N min of the chosen send time
 const REMINDER_GRACE_MIN = 30              // first ping fires within 30m of due
 const REPEAT_WINDOW_MIN = 360              // stop repeating 6h after the first ping
 
@@ -161,13 +161,18 @@ async function eventsToday(admin: any, userId: string, localDate: string, tz: st
 async function sendBriefs(admin: any) {
   if (!ANTHROPIC_API_KEY) return 0
   const { data: prefs } = await admin
-    .from('user_prefs').select('user_id, timezone, last_brief_on').eq('morning_brief', true)
+    .from('user_prefs').select('user_id, timezone, last_brief_on, brief_time').eq('morning_brief', true)
   let sent = 0
   for (const p of prefs ?? []) {
     if (!p.timezone) continue
     const { date, hour, minute } = localParts(p.timezone)
-    // Fire once in the 7:00–7:04 window, and only if we haven't today.
-    if (hour !== BRIEF_HOUR || minute > 4 || p.last_brief_on === date) continue
+    // Fire once, in a short window at or just after the user's chosen send time
+    // (default 7:00). Comparing minutes-past-midnight handles any hour cleanly.
+    const [bh, bm] = String(p.brief_time || '07:00').split(':').map(Number)
+    const target = (bh || 0) * 60 + (bm || 0)
+    const nowTotal = hour * 60 + minute
+    const past = nowTotal - target
+    if (past < 0 || past > BRIEF_WINDOW_MIN || p.last_brief_on === date) continue
 
     const { data: tasks } = await admin
       .from('tasks').select('title, time, completed').eq('user_id', p.user_id).eq('date', date)

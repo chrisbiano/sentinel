@@ -11,7 +11,7 @@ import {
    any reminder depends on it. The iOS reality is baked in: on iPhone, push only
    works once Sentinel is installed to the home screen, so a Safari tab is
    guided to install rather than shown a button that can't work. */
-function NotificationsSection({ morningBrief, onMorningBriefChange }) {
+function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, onBriefTimeChange }) {
   const [status] = useState(pushStatus)      // ready | ios-needs-install | unsupported | unconfigured
   const [enabled, setEnabled] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -115,11 +115,22 @@ function NotificationsSection({ morningBrief, onMorningBriefChange }) {
                 <div className="min-w-0">
                   <p className="text-sm text-fg">Morning brief</p>
                   <p className="text-xs text-faint mt-0.5">
-                    A 7am summary of your day — schedule, tasks, and emails needing a reply.
+                    A summary of your day — schedule, tasks, and emails needing a reply.
                   </p>
                 </div>
                 <Toggle checked={morningBrief} onChange={onMorningBriefChange} />
               </div>
+              {morningBrief && onBriefTimeChange && (
+                <div className="flex items-center justify-between gap-4 mt-3">
+                  <p className="text-sm text-muted">Send at</p>
+                  <input
+                    type="time"
+                    value={briefTime}
+                    onChange={e => onBriefTimeChange(e.target.value)}
+                    className="input py-1 text-sm w-36"
+                  />
+                </div>
+              )}
               {!enabled && (
                 <p className="text-xs text-muted mt-2">
                   It arrives as a notification — turn on “Reminders on this device” above (or on your phone) to receive it.
@@ -333,7 +344,7 @@ function AccountRow({ account, onSetPurpose, onDisconnect }) {
   )
 }
 
-export default function SettingsModal({ open, onClose, settings, onChange, morningBrief, onMorningBriefChange }) {
+export default function SettingsModal({ open, onClose, settings, onChange, morningBrief, onMorningBriefChange, briefTime, onBriefTimeChange }) {
   const [email, setEmail] = useState(null)
   const [connecting, setConnecting] = useState(false)
   const { accounts, loading: accountsLoading, disconnect, setPurpose } = useConnectedAccounts()
@@ -424,7 +435,12 @@ export default function SettingsModal({ open, onClose, settings, onChange, morni
 
           {/* Notifications — Web Push for reminders */}
           {isSupabaseConfigured && (
-            <NotificationsSection morningBrief={morningBrief} onMorningBriefChange={onMorningBriefChange} />
+            <NotificationsSection
+              morningBrief={morningBrief}
+              onMorningBriefChange={onMorningBriefChange}
+              briefTime={briefTime}
+              onBriefTimeChange={onBriefTimeChange}
+            />
           )}
 
           {/* Connected mailboxes */}

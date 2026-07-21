@@ -6,6 +6,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
    The timezone is synced on every load; the toggle lives in Settings. */
 export default function useUserPrefs() {
   const [morningBrief, setMorningBriefState] = useState(true)
+  const [briefTime, setBriefTimeState] = useState('07:00')   // local "HH:MM" the brief sends at
   const userIdRef = useRef(null)
   const started = useRef(false)
 
@@ -25,8 +26,11 @@ export default function useUserPrefs() {
           { onConflict: 'user_id' },
         )
         const { data } = await supabase
-          .from('user_prefs').select('morning_brief').eq('user_id', user.id).single()
-        if (data) setMorningBriefState(data.morning_brief)
+          .from('user_prefs').select('morning_brief, brief_time').eq('user_id', user.id).single()
+        if (data) {
+          setMorningBriefState(data.morning_brief)
+          if (data.brief_time) setBriefTimeState(String(data.brief_time).slice(0, 5))
+        }
       } catch (e) {
         console.error('user prefs sync failed:', e)
       }
@@ -48,5 +52,20 @@ export default function useUserPrefs() {
     }
   }, [])
 
-  return { morningBrief, setMorningBrief }
+  const setBriefTime = useCallback((hhmm) => {
+    setBriefTimeState(hhmm)
+    if (isSupabaseConfigured && userIdRef.current) {
+      supabase.from('user_prefs').upsert(
+        {
+          user_id: userIdRef.current,
+          brief_time: hhmm,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' },
+      ).then(({ error }) => { if (error) console.error('brief time save failed:', error) })
+    }
+  }, [])
+
+  return { morningBrief, setMorningBrief, briefTime, setBriefTime }
 }

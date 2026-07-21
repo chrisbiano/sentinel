@@ -42,7 +42,7 @@ export default function App() {
 
   // Captures the browser timezone (so the morning brief lands at 7am local) and
   // holds the brief on/off toggle.
-  const { morningBrief, setMorningBrief } = useUserPrefs()
+  const { morningBrief, setMorningBrief, briefTime, setBriefTime } = useUserPrefs()
 
   const [settings, setSettings] = useState(() => {
     try {
@@ -420,6 +420,8 @@ export default function App() {
         onChange={setSettings}
         morningBrief={morningBrief}
         onMorningBriefChange={setMorningBrief}
+        briefTime={briefTime}
+        onBriefTimeChange={setBriefTime}
       />
 
       {/* Floating AI quick-add — bottom-left, always in reach. */}
