@@ -3,6 +3,7 @@ import SectionHeader from './SectionHeader'
 import TaskForm from './TaskForm'
 import ViewSwitcher from './ViewSwitcher'
 import SortableSubtasks from './SortableSubtasks'
+import { SNOOZE_OPTS, snoozeLabel, isSnoozed, snoozeTargetFor } from '../lib/snooze'
 
 // Whole-hour marks to show down a block, positioned between the *measured* pixel
 // positions of the start (sY) and end (eY) gutter labels — NOT by percent of the
@@ -116,12 +117,22 @@ function TimelineIcon() {
   )
 }
 
-function BellDot() {
+function BellIcon({ off }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-      strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
+      strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
       <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      {off && <line x1="3" y1="3" x2="21" y2="21" />}
+    </svg>
+  )
+}
+
+function SnoozeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
     </svg>
   )
 }
@@ -181,12 +192,17 @@ export default function Timeline({
   onAddTask,
   onUpdateTask,
   onToggleComplete,
+  onToggleReminder,
+  onSnooze,
+  onUnsnooze,
+  highlightId,
   view,
   onChangeView,
 }) {
   const [addingFor, setAddingFor] = useState(null)  // event id with an open input
   const [draft, setDraft] = useState('')
   const [addingTask, setAddingTask] = useState(false)
+  const [snoozeFor, setSnoozeFor] = useState(null)  // task id whose snooze picker is open
 
   // Event handlers take the block's context, not just its id, so the saved note
   // stays readable even if the event later disappears from Google.
@@ -221,6 +237,9 @@ export default function Timeline({
       duration: t.duration,
       kind: 'task',
       hasReminder: t.hasReminder,
+      remindAt: t.remindAt,            // for snoozed-vs-scheduled detection
+      date: t.date,
+      reminderLeadMin: t.reminderLeadMin,
       done: t.completed,
       subtasks: t.subtasks || [],
     })),
@@ -324,7 +343,10 @@ export default function Timeline({
   // The inner content of an item — identical whether it sits loose on the rail
   // or inside a block's outline. This is what used to live inline in the <li>.
   const itemBody = (item) => (
-    <div className={item.done ? 'opacity-50' : ''}>
+    <div className={`${item.done ? 'opacity-50' : ''} ${
+      item.kind === 'task' && item.rawId === highlightId
+        ? 'ring-2 ring-accent ring-offset-2 ring-offset-surface rounded-lg' : ''
+    }`}>
       <div className="flex items-center gap-2 flex-wrap">
         {/* Check anything off right here. For events this is Sentinel's own
             "wrapped up" flag — Google's copy is never touched. */}
@@ -353,8 +375,33 @@ export default function Timeline({
             overlap
           </span>
         )}
-        {item.kind === 'task' && item.hasReminder && (
-          <span className="text-faint" title="Reminder on"><BellDot /></span>
+        {/* Reminder controls live here now that timed tasks are calendar-only:
+            an icon toggle for the bell, and a snooze once it's on. */}
+        {item.kind === 'task' && !item.done && onToggleReminder && (
+          <span className="flex items-center gap-0.5">
+            <button
+              onClick={() => onToggleReminder(item.rawId)}
+              aria-label={item.hasReminder ? 'Turn reminder off' : 'Turn reminder on'}
+              title={item.hasReminder ? 'Reminder on' : 'Reminder off'}
+              className={`w-6 h-6 flex items-center justify-center rounded-md transition-colors ${
+                item.hasReminder ? 'text-fg bg-surface2' : 'text-faint hover:text-fg hover:bg-surface2'
+              }`}
+            >
+              <BellIcon off={!item.hasReminder} />
+            </button>
+            {item.hasReminder && onSnooze && (
+              <button
+                onClick={() => setSnoozeFor(snoozeFor === item.rawId ? null : item.rawId)}
+                aria-label="Snooze reminder"
+                title="Snooze"
+                className={`w-6 h-6 flex items-center justify-center rounded-md transition-colors ${
+                  snoozeFor === item.rawId ? 'text-fg bg-surface2' : 'text-faint hover:text-fg hover:bg-surface2'
+                }`}
+              >
+                <SnoozeIcon />
+              </button>
+            )}
+          </span>
         )}
         {item.subtasks.length > 0 && (
           <span className="text-xs text-faint tabular-nums">
@@ -433,6 +480,37 @@ export default function Timeline({
             + Add subtask
           </button>
         )
+      )}
+
+      {/* Snooze picker + the persistent "snoozed to…" state, with Undo. */}
+      {item.kind === 'task' && !item.done && snoozeFor === item.rawId && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="text-xs text-muted flex items-center gap-1.5"><SnoozeIcon /> Snooze…</span>
+          <div className="flex gap-1.5">
+            {SNOOZE_OPTS.map(opt => (
+              <button
+                key={opt.key}
+                onClick={() => { onSnooze(item.rawId, snoozeTargetFor(opt).toISOString()); setSnoozeFor(null) }}
+                className="text-xs px-2 py-1 rounded-lg border border-line text-muted hover:text-fg hover:border-line2 transition-colors"
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {item.kind === 'task' && !item.done && snoozeFor !== item.rawId && isSnoozed(item) && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="text-xs text-muted flex items-center gap-1.5">
+            <SnoozeIcon /> Snoozed to {snoozeLabel(item.remindAt)}
+          </span>
+          <button
+            onClick={() => onUnsnooze(item.rawId)}
+            className="text-xs px-2 py-1 rounded-lg border border-line text-muted hover:text-fg hover:border-line2 transition-colors"
+          >
+            Undo
+          </button>
+        </div>
       )}
     </div>
   )

@@ -210,7 +210,9 @@ export default function App() {
     setHighlightTaskId(t.id)
     setPendingTaskId(null)
     try { window.history.replaceState({}, '', window.location.pathname) } catch { /* ignore */ }
-    setTimeout(() => scrollToSection('tasks-section'), 80)
+    // Timed tasks are on the schedule now, untimed ones in the list — jump to
+    // wherever this one actually lives.
+    setTimeout(() => scrollToSection(t.time ? 'schedule-section' : 'tasks-section'), 80)
     const clear = setTimeout(() => setHighlightTaskId(null), 3000)
     return () => clearTimeout(clear)
   }, [pendingTaskId, tasks])
@@ -233,6 +235,9 @@ export default function App() {
   const visibleTasks = settings.hideCompleted
     ? dayTasks.filter(t => !t.completed)
     : dayTasks
+  // Timed tasks live on the schedule only (they have a slot there); the task list
+  // is for the untimed "whenever" to-dos. Keeps the two from doubling up.
+  const untimedTasks = visibleTasks.filter(t => !t.time)
 
   return (
     <Layout onOpenSettings={() => setSettingsOpen(true)}>
@@ -318,6 +323,7 @@ export default function App() {
             onChangeDate={(d) => { setSelectedDate(d); setView('day'); setSearch('') }}
           />
         ) : view === 'day' ? (
+          <div id="schedule-section" className="scroll-mt-20">
           <Timeline
             tasks={visibleTasks}
             events={dayEvents}
@@ -331,6 +337,10 @@ export default function App() {
             onSetEventSubtasks={setEventSubtasks}
             onToggleEventDone={toggleEventDone}
             onUpdateTask={updateTask}
+            onToggleReminder={toggleReminder}
+            onSnooze={snoozeTask}
+            onUnsnooze={unsnoozeTask}
+            highlightId={highlightTaskId}
             selectedDate={selectedDate}
             onChangeDate={setSelectedDate}
             defaultDate={selectedISO}
@@ -339,6 +349,7 @@ export default function App() {
             view={view}
             onChangeView={setView}
           />
+          </div>
         ) : view === 'week' ? (
           <WeekView
             tasks={tasks}
@@ -370,7 +381,7 @@ export default function App() {
         <div id="working-area" className="grid grid-cols-1 lg:grid-cols-2 gap-6 scroll-mt-20">
           <div id="tasks-section" className="scroll-mt-20">
             <TasksSection
-              tasks={visibleTasks}
+              tasks={untimedTasks}
               onToggleReminder={toggleReminder}
               onSnooze={snoozeTask}
               onUnsnooze={unsnoozeTask}
