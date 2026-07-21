@@ -38,13 +38,24 @@ self.addEventListener('notificationclick', (event) => {
   const taskId = tag.startsWith('task-') ? tag.slice(5) : null
   const url = taskId ? `/?task=${taskId}` : (event.notification.data?.url || '/')
   event.waitUntil((async () => {
-    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-    for (const client of clients) {
-      if ('focus' in client) {
-        await client.focus()
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    const client = windows.find(c => 'focus' in c)
+    if (client) {
+      await client.focus()
+      // A still-visible window is alive — just tell it which task to surface, no
+      // reload flash. But a backgrounded/suspended iOS PWA webview resumes BLACK:
+      // WebKit runs the JS again yet never repaints. Navigating that window forces
+      // a real render (and carries the ?task= deep-link). Fall back to a message
+      // if navigate() isn't available or gets rejected (e.g. uncontrolled client).
+      if (client.visibilityState === 'visible') {
         if (taskId) client.postMessage({ type: 'open-task', taskId })
         return
       }
+      try {
+        if ('navigate' in client) { await client.navigate(url); return }
+      } catch { /* fall through to a message */ }
+      if (taskId) client.postMessage({ type: 'open-task', taskId })
+      return
     }
     return self.clients.openWindow(url)
   })())
