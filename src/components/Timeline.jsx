@@ -220,8 +220,19 @@ export default function Timeline({
     id: item.rawId, title: item.title, date: item.date, time: item.time,
   })
 
+  // Add a subtask inline — to an event's Sentinel note, or straight onto a task's
+  // own subtask list. Same affordance for both, so a task session gets the exact
+  // add-a-step flow a calendar block has.
   const submitSubtask = (item) => {
-    onAddEventSubtask(metaOf(item), draft)
+    const title = draft.trim()
+    if (title) {
+      if (item.kind === 'event') {
+        onAddEventSubtask(metaOf(item), title)
+      } else {
+        const sid = crypto?.randomUUID ? crypto.randomUUID() : `s${Date.now()}${Math.random().toString(36).slice(2, 6)}`
+        onUpdateTask(item.rawId, { subtasks: [...(item.subtasks || []), { id: sid, title, done: false }] })
+      }
+    }
     setDraft('')
     setAddingFor(null)
   }
@@ -301,10 +312,12 @@ export default function Timeline({
     }
   }
 
-  // A block gets an outline box if it runs long (≥2h) or wraps a real item.
-  // A boxed block nested inside a bigger box doesn't get its own (one level).
+  // A block gets an outline box if it's a timed task (every work session is
+  // confined in its own stroke, showing its start→end), or runs long (≥2h), or
+  // wraps a real item. A boxed block nested inside a bigger box doesn't get its
+  // own (one level).
   const blocks = spans.filter(b => (b.duration || 0) > 0)
-  const boxable = blocks.filter(b => b.duration >= 120 || spans.some(x => contains(b, x)))
+  const boxable = blocks.filter(b => b.kind === 'task' || b.duration >= 120 || spans.some(x => contains(b, x)))
   const boxBlocks = boxable.filter(b => !boxable.some(o => contains(o, b)))
 
   // A row belongs to a box if it starts strictly inside the box (an item must
@@ -466,9 +479,9 @@ export default function Timeline({
         />
       )}
 
-      {/* Prep checklist on a calendar block — stored in Sentinel, never
-          written back to Google. */}
-      {item.kind === 'event' && (
+      {/* Add-a-step checklist — a calendar block's Sentinel note, or a task's own
+          subtasks. Same inline affordance for both. */}
+      {(item.kind === 'event' || item.kind === 'task') && (
         addingFor === item.rawId ? (
           <div className="flex items-center gap-2 mt-2">
             <input
