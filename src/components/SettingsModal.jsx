@@ -106,16 +106,25 @@ function NotificationsSection({ morningBrief, onMorningBriefChange }) {
             </button>
           )}
 
-          {/* Account-wide, but delivered by push, so it lives with notifications. */}
-          {enabled && onMorningBriefChange && (
-            <div className="flex items-center justify-between gap-4 mt-4 pt-3 border-t border-line">
-              <div className="min-w-0">
-                <p className="text-sm text-fg">Morning brief</p>
-                <p className="text-xs text-faint mt-0.5">
-                  A 7am summary of your day — schedule, tasks, and emails needing a reply.
-                </p>
+          {/* Account-wide, but delivered by push, so it lives with notifications.
+              Shown even when this device's notifications are off — otherwise the
+              toggle is invisible and can never be turned on. */}
+          {onMorningBriefChange && (
+            <div className="mt-4 pt-3 border-t border-line">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm text-fg">Morning brief</p>
+                  <p className="text-xs text-faint mt-0.5">
+                    A 7am summary of your day — schedule, tasks, and emails needing a reply.
+                  </p>
+                </div>
+                <Toggle checked={morningBrief} onChange={onMorningBriefChange} />
               </div>
-              <Toggle checked={morningBrief} onChange={onMorningBriefChange} />
+              {!enabled && (
+                <p className="text-xs text-muted mt-2">
+                  It arrives as a notification — turn on “Reminders on this device” above (or on your phone) to receive it.
+                </p>
+              )}
             </div>
           )}
         </>
