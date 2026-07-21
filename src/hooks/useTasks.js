@@ -177,6 +177,21 @@ export default function useTasks() {
     }
   }, [])
 
+  // Push a reminder later without touching the task's scheduled time. Sets an
+  // absolute new fire time and re-arms it (clears the fired stamp) so the
+  // scheduler buzzes again when it comes due. Used by the notification-tap flow.
+  const snoozeTask = useCallback((id, untilISO) => {
+    const t = tasksRef.current.find(x => x.id === id)
+    if (!t) return
+    setTasks(prev => prev.map(x => (
+      x.id === id ? { ...x, hasReminder: true, remindAt: untilISO, reminderFiredAt: null } : x
+    )))
+    if (isSupabaseConfigured) {
+      updateTaskRow(id, { hasReminder: true, remindAt: untilISO, reminderFiredAt: null })
+        .catch(e => console.error('Snooze failed:', e))
+    }
+  }, [])
+
   const toggleComplete = useCallback((id) => {
     const t = tasksRef.current.find(x => x.id === id)
     if (!t) return
@@ -196,6 +211,6 @@ export default function useTasks() {
   return {
     tasks, loading, error, clearError: () => setError(null),
     addTask, updateTask, deleteTask, deleteSeries, duplicateTask,
-    toggleReminder, toggleComplete, toggleSubtask,
+    toggleReminder, snoozeTask, toggleComplete, toggleSubtask,
   }
 }

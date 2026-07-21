@@ -47,6 +47,33 @@ function BellIcon({ off }) {
   )
 }
 
+function SnoozeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+    </svg>
+  )
+}
+
+// Snooze presets. The actual fire time is computed at click (not when the picker
+// opens), in local zone → ISO, matching how reminders already store remind_at.
+const SNOOZE_OPTS = [
+  { key: '15m', label: '15 min', mins: 15 },
+  { key: '1h', label: '1 hour', mins: 60 },
+  { key: 'eve', label: 'Evening', evening: true },
+]
+const fmtTime = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+const snoozeTargetFor = (opt) => {
+  const now = Date.now()
+  if (opt.evening) {
+    const e = new Date(); e.setHours(18, 0, 0, 0)   // 6 PM local
+    // Already evening? "This evening" is behind us — nudge 2h out instead.
+    return e.getTime() > now + 5 * 60000 ? e : new Date(now + 2 * 3600000)
+  }
+  return new Date(now + opt.mins * 60000)
+}
+
 function EditIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -83,15 +110,27 @@ function PlusIcon() {
   )
 }
 
-export default function TasksSection({ tasks, onToggleReminder, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, highlightId, defaultDate }) {
+export default function TasksSection({ tasks, onToggleReminder, onSnooze, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, highlightId, defaultDate }) {
   const [form, setForm] = useState(null) // null | 'new' | taskId
   const [confirmDelete, setConfirmDelete] = useState(null) // taskId of a repeating task
   const [dupFor, setDupFor] = useState(null)   // taskId whose "duplicate to…" picker is open
   const [dupDate, setDupDate] = useState('')   // chosen target day for the duplicate
   const [dupMsg, setDupMsg] = useState(null)   // { id, text } transient "duplicated to…" note
+  const [snoozeFor, setSnoozeFor] = useState(null) // taskId whose snooze picker is open
+  const [snoozeMsg, setSnoozeMsg] = useState(null) // { id, text } transient "snoozed to…" note
   const [showCompleted, setShowCompleted] = useState(false)
 
   const closeForm = () => setForm(null)
+
+  // Push a reminder later and confirm the new time — the notification can't carry
+  // its own buttons on iOS, so snoozing lives here on the task instead.
+  const runSnooze = (task, opt) => {
+    const when = snoozeTargetFor(opt)
+    onSnooze(task.id, when.toISOString())
+    setSnoozeFor(null)
+    setSnoozeMsg({ id: task.id, text: `Snoozed to ${fmtTime(when)}` })
+    setTimeout(() => setSnoozeMsg(m => (m?.id === task.id ? null : m)), 3000)
+  }
 
   // A duplicate can land on another day (which may not be the day in view), so
   // confirm where it went instead of leaving Chris wondering if it worked.
@@ -179,6 +218,21 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
               >
                 <BellIcon off={!task.hasReminder} />
                 {task.hasReminder ? 'On' : 'Off'}
+              </button>
+            )}
+            {!task.completed && task.hasReminder && onSnooze && (
+              <button
+                onClick={() => {
+                  setSnoozeFor(snoozeFor === task.id ? null : task.id)
+                  setDupFor(null); setConfirmDelete(null)
+                }}
+                aria-label="Snooze reminder"
+                title="Snooze"
+                className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${
+                  snoozeFor === task.id ? 'text-fg bg-surface2' : 'text-faint hover:text-fg hover:bg-surface2'
+                }`}
+              >
+                <SnoozeIcon />
               </button>
             )}
             {onDuplicate && (
@@ -270,6 +324,30 @@ export default function TasksSection({ tasks, onToggleReminder, onToggleComplete
         {dupMsg?.id === task.id && (
           <div className="mt-3 pt-3 border-t border-line flex items-center gap-1.5 text-xs text-muted">
             <CopyIcon /> {dupMsg.text}
+          </div>
+        )}
+
+        {/* Snooze — push this reminder later. Confirms the new fire time. */}
+        {snoozeFor === task.id && (
+          <div className="mt-3 pt-3 border-t border-line flex items-center justify-between gap-2">
+            <span className="text-xs text-muted flex items-center gap-1.5"><SnoozeIcon /> Snooze…</span>
+            <div className="flex gap-1.5">
+              {SNOOZE_OPTS.map(opt => (
+                <button
+                  key={opt.key}
+                  onClick={() => runSnooze(task, opt)}
+                  className="text-xs px-2 py-1 rounded-lg border border-line text-muted hover:text-fg hover:border-line2 transition-colors"
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {snoozeMsg?.id === task.id && (
+          <div className="mt-3 pt-3 border-t border-line flex items-center gap-1.5 text-xs text-muted">
+            <SnoozeIcon /> {snoozeMsg.text}
           </div>
         )}
 
