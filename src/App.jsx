@@ -48,7 +48,7 @@ export default function App() {
   const { morningBrief, setMorningBrief, briefTime, setBriefTime } = useUserPrefs()
 
   // The morning brief lives as a card at the top of the dashboard until dismissed.
-  const { brief, loading: briefLoading, show: showBrief, dismiss: dismissBrief } =
+  const { brief, loading: briefLoading, show: showBrief, dismiss: dismissBrief, refresh: refreshBrief } =
     useMorningBrief({ enabled: morningBrief, briefTime })
 
   const [settings, setSettings] = useState(() => {
@@ -251,7 +251,7 @@ export default function App() {
       <main className="space-y-6">
         {/* Morning brief — pinned at the very top until dismissed. */}
         {showBrief && (
-          <MorningBriefCard brief={brief} loading={briefLoading} onDismiss={dismissBrief} />
+          <MorningBriefCard brief={brief} loading={briefLoading} onRefresh={refreshBrief} onDismiss={dismissBrief} />
         )}
 
         {/* A save that failed should say so, not quietly vanish */}

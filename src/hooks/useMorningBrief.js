@@ -26,6 +26,7 @@ export default function useMorningBrief({ enabled, briefTime }) {
   const [text, setText] = useState(null)
   const [dismissed, setDismissed] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [tick, setTick] = useState(0)   // bumped by refresh() to force a regenerate
   const genStarted = useRef(false)
 
   useEffect(() => {
@@ -61,7 +62,16 @@ export default function useMorningBrief({ enabled, briefTime }) {
         setLoading(false)
       }
     })()
-  }, [enabled, briefTime])
+  }, [enabled, briefTime, tick])
+
+  // Throw away today's cached brief and generate a fresh one (e.g. plans changed,
+  // or tasks were knocked out since the morning).
+  const refresh = () => {
+    try { localStorage.removeItem(KEY) } catch { /* non-fatal */ }
+    genStarted.current = false
+    setText(null)
+    setTick(t => t + 1)
+  }
 
   const dismiss = () => {
     const today = toISODate(new Date())
@@ -71,5 +81,5 @@ export default function useMorningBrief({ enabled, briefTime }) {
   }
 
   const show = Boolean(enabled) && !dismissed && (loading || Boolean(text))
-  return { brief: text, loading, show, dismiss }
+  return { brief: text, loading, show, dismiss, refresh }
 }

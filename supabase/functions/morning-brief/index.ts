@@ -44,12 +44,36 @@ async function freshAccessToken(admin: any, account: any) {
   return j.access_token
 }
 
+// "YYYY-MM-DD" + 1 day (pure date arithmetic, no timezone involved).
+function nextDay(localDate: string): string {
+  const [Y, M, D] = localDate.split('-').map(Number)
+  return new Date(Date.UTC(Y, M - 1, D + 1)).toISOString().slice(0, 10)
+}
+
+// The UTC instant of local midnight in `tz` on `localDate`. The function runs in
+// UTC, so parsing "YYYY-MM-DDT00:00:00" directly would be UTC midnight — shifting
+// the whole day window by the user's offset (which is how yesterday's evening
+// events leaked into today's brief). Guess UTC midnight, see what wall-clock that
+// is in the zone, and correct by the difference.
+function zonedMidnightUTC(localDate: string, tz: string): Date {
+  const [Y, M, D] = localDate.split('-').map(Number)
+  const guess = new Date(Date.UTC(Y, M - 1, D, 0, 0, 0))
+  const f = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  })
+  const p: Record<string, string> = {}
+  for (const part of f.formatToParts(guess)) if (part.type !== 'literal') p[part.type] = part.value
+  const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second)
+  return new Date(guess.getTime() - (asUTC - guess.getTime()))
+}
+
 // Best-effort: the day's event titles + times across the user's calendars.
 async function eventsToday(admin: any, userId: string, localDate: string, tz: string) {
   try {
-    const start = new Date(`${localDate}T00:00:00`)
-    const timeMin = new Date(start).toISOString()
-    const timeMax = new Date(start.getTime() + 86_400_000).toISOString()
+    // The user's local day, as real UTC instants.
+    const timeMin = zonedMidnightUTC(localDate, tz).toISOString()
+    const timeMax = zonedMidnightUTC(nextDay(localDate), tz).toISOString()
     const { data: accounts } = await admin
       .from('connected_accounts').select('id, email').eq('user_id', userId).eq('provider', 'google')
     const per = await Promise.all((accounts ?? []).map(async (acct: any) => {
