@@ -182,6 +182,21 @@ export default function useEmails() {
   const same = (e, email) =>
     e.message_id === email.message_id && e.account_email === email.account_email
 
+  /* A sent reply is handled. gmail-send stamps this server-side too, but that
+     stamp is fire-and-forget and has been seen not to stick — so the client
+     writes it as well (RLS scopes it to his own rows). Whichever stamp lands,
+     the email stays gone across reloads; if this one fails, the error is shown
+     instead of the mail silently reappearing tomorrow. */
+  const markHandled = useCallback(async (email) => {
+    setEmails(prev => prev.filter(e => !same(e, email)))
+    const { error: dbError } = await supabase
+      .from('email_verdicts')
+      .update({ handled_at: new Date().toISOString() })
+      .eq('message_id', email.message_id)
+      .eq('account_email', email.account_email)
+    if (dbError) setError(`The reply sent, but marking it handled failed: ${dbError.message}`)
+  }, [])
+
   /* Move an email to a different bucket by hand — Claude got it wrong. Records
      it as Chris's call so nothing re-sorts it later. Pure DB update (RLS scopes
      to his own rows); no Gmail side. */
@@ -234,6 +249,7 @@ export default function useEmails() {
     refresh,
     act,
     dismiss,
+    markHandled,
     reclassify,
     toggleFlag,
     markTaskAdded,

@@ -452,13 +452,20 @@ Deno.serve(async (req) => {
     return json({ error: detail }, 502)
   }
 
-  // Sent — mark it handled so it leaves the list.
-  await admin
+  // Sent — mark it handled so it leaves the list. Verified, not fire-and-forget:
+  // if the stamp fails the mail still went out, so we say so instead of
+  // pretending everything happened (the client also stamps as a backup).
+  const { data: stamped, error: stampErr } = await admin
     .from('email_verdicts')
     .update({ handled_at: new Date().toISOString() })
     .eq('user_id', u.user.id)
     .eq('account_email', accountEmail)
     .eq('message_id', messageId)
+    .select('message_id')
+  if (stampErr || !stamped?.length) {
+    console.error('handled stamp failed:', stampErr?.message ?? 'no matching row')
+    return json({ ok: true, handledWarning: stampErr?.message ?? 'no matching verdict row' })
+  }
 
   return json({ ok: true })
 })

@@ -227,6 +227,7 @@ export default function EmailSection({
   accountErrors = [],
   onAct,
   onDismiss,
+  onMarkHandled,
   onReclassify,
   onFlag,
   onAddToTasks,
@@ -366,9 +367,10 @@ export default function EmailSection({
           email={replyTo}
           onClose={() => setReplyTo(null)}
           onSent={(sent) => {
-            // gmail-send already marked it handled server-side, so this is a
-            // pure local removal — no gmail-action round-trip.
-            onDismiss(sent.message_id, sent.account_email)
+            // gmail-send stamps handled server-side, but that stamp has been
+            // seen not to stick — so the client stamps it too (and surfaces an
+            // error if even that fails), so a replied email never resurfaces.
+            onMarkHandled(sent)
             setReplyTo(null)
           }}
         />

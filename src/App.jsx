@@ -103,6 +103,7 @@ export default function App() {
     clearError: clearEmailError,
     act: actOnEmail,
     dismiss: dismissEmail,
+    markHandled: markEmailHandled,
     reclassify: reclassifyEmail,
     toggleFlag: toggleEmailFlag,
     markTaskAdded: markEmailTaskAdded,
@@ -417,6 +418,7 @@ export default function App() {
               accountErrors={emailAccountErrors}
               onAct={actOnEmail}
               onDismiss={dismissEmail}
+              onMarkHandled={markEmailHandled}
               onReclassify={reclassifyEmail}
               onFlag={toggleEmailFlag}
               onAddToTasks={addEmailToTasks}
