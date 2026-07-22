@@ -176,17 +176,23 @@ export default function App() {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  // Quick add: send a natural-language note to Claude and get back a task the
-  // form can pre-fill. Timezone-relative words ("tomorrow") resolve against the
-  // browser's local date, passed along. Returns a TaskForm-shaped object.
-  const parseTask = async (text) => {
+  // The A.I. assistant: send a plain-language note plus a compact roster of open
+  // tasks; Claude returns ONE structured command — create / update / complete —
+  // which the launcher shows for confirmation. Nothing applies without a tap.
+  // Refs (not ids) round-trip through the model; we map them back here.
+  const runAssistant = async (text) => {
     const now = new Date()
+    const openTasks = tasks.filter(t => !t.completed).slice(0, 60)
+    const roster = openTasks.map((t, i) => ({
+      ref: i, title: t.title, date: t.date, time: t.time, durationMin: t.duration,
+    }))
     const { data, error } = await supabase.functions.invoke('parse-task', {
       body: {
         text,
         today: toISODate(now),
         weekday: now.toLocaleDateString('en-US', { weekday: 'long' }),
         nowTime: now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+        tasks: roster,
       },
     })
     if (error || data?.error) {
@@ -196,15 +202,14 @@ export default function App() {
       }
       throw new Error(msg || 'Could not read that')
     }
-    const p = data.task
-    return {
-      title: p.title,
-      date: p.date,       // YYYY-MM-DD | null
-      time: p.time,       // "10:00 AM" | null
-      duration: p.durationMin,
-      hasReminder: p.reminder,
-      subtasks: (p.subtasks || []).map(t => ({ id: Math.random().toString(36).slice(2, 9), title: t, done: false })),
+    // Older deployed function returns { task } (create-only) — treat it as a
+    // create command so the assistant keeps working until the new one ships.
+    if (!data.command && data.task) {
+      const p = data.task
+      return { intent: 'create', title: p.title, date: p.date, time: p.time, durationMin: p.durationMin, subtasks: p.subtasks || [], reminder: p.reminder, note: '', task: null }
     }
+    const c = data.command
+    return { ...c, task: c.taskRef >= 0 ? (openTasks[c.taskRef] ?? null) : null }
   }
 
   // Resolve a reminder deep-link once the task is known: focus its day, scroll to
@@ -439,10 +444,13 @@ export default function App() {
         onBriefTimeChange={setBriefTime}
       />
 
-      {/* Floating AI quick-add — bottom-left, always in reach. */}
+      {/* Floating A.I. assistant — bottom-left, always in reach. Creates, edits,
+          and completes tasks from plain language; everything confirmed by a tap. */}
       <AssistantLauncher
-        onParseTask={parseTask}
+        onCommand={runAssistant}
         onAdd={addTask}
+        onUpdate={updateTask}
+        onComplete={toggleComplete}
         defaultDate={selectedISO}
       />
 

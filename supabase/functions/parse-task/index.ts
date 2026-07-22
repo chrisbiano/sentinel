@@ -1,6 +1,7 @@
-// Sentinel — turn a quick natural-language note into a structured task. It only
-// PARSES; it never saves. The app opens the task form pre-filled with the result
-// so Chris eyeballs it and hits Save (proposes, you approve).
+// Sentinel — the A.I. assistant's brain. Turns a plain-language note into ONE
+// structured command: create a task, update an existing one, or complete one.
+// It only PROPOSES — the app shows the result and Chris confirms before anything
+// saves (create opens the pre-filled form; update/complete show a confirm card).
 //
 // Deploy with "Verify JWT" ON. Needs ANTHROPIC_API_KEY (same secret triage uses).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -23,14 +24,23 @@ const json = (body: unknown, status = 200) =>
 const SCHEMA = {
   type: 'object',
   properties: {
-    title: { type: 'string', description: 'Concise task title, no date/time in it' },
-    date: { type: 'string', description: 'YYYY-MM-DD the task is for, or "" if none was implied' },
-    time: { type: 'string', description: 'Start time like "10:00 AM" (12-hour), or "" if none' },
-    durationMin: { type: 'integer', description: 'Minutes; default 30 if not stated' },
-    subtasks: { type: 'array', items: { type: 'string' }, description: 'Short subtask titles if steps were listed' },
-    reminder: { type: 'boolean', description: 'True only if a reminder/alert was requested' },
+    intent: {
+      type: 'string', enum: ['create', 'update', 'complete', 'none'],
+      description: 'create a new task; update an existing task; complete (check off) an existing task; none if nothing actionable or the match is too ambiguous',
+    },
+    taskRef: { type: 'integer', description: 'For update/complete: the [n] ref of the matched task. -1 otherwise.' },
+    title: { type: 'string', description: 'create: concise task title, no date/time in it. update: a NEW title only if he asked to rename, else "".' },
+    date: { type: 'string', description: 'YYYY-MM-DD. create: "" if no date implied. update: the new date only if it changes, else "".' },
+    time: { type: 'string', description: '12-hour like "4:00 PM". create: "" if none. update: the new start time only if it changes, else "".' },
+    durationMin: { type: 'integer', description: 'Minutes. create: what he said, else 30. update: the new duration only if it changes, else 0.' },
+    subtasks: { type: 'array', items: { type: 'string' }, description: 'create only: short subtask titles if steps were listed, else []' },
+    reminder: { type: 'boolean', description: 'create only: true only if a reminder/alert was requested' },
+    note: {
+      type: 'string',
+      description: `One short sentence saying exactly what will happen ("Move 'Rough cut' to Friday 2:00 PM"), or for none: why nothing matched.`,
+    },
   },
-  required: ['title', 'date', 'time', 'durationMin', 'subtasks', 'reminder'],
+  required: ['intent', 'taskRef', 'title', 'date', 'time', 'durationMin', 'subtasks', 'reminder', 'note'],
   additionalProperties: false,
 }
 
@@ -46,20 +56,31 @@ Deno.serve(async (req) => {
 
   let body: any = {}
   try { body = await req.json() } catch { /* none */ }
-  const { text, today, weekday, nowTime } = body
+  const { text, today, weekday, nowTime, tasks } = body
   if (!text || !String(text).trim()) return json({ error: 'Expected { text }' }, 400)
 
-  const system = `You convert Chris's quick note into a single structured task for Sentinel. Today is ${today || '(unknown)'}${weekday ? ` (${weekday})` : ''}${nowTime ? `, current time ${nowTime}` : ''}, in his local timezone.
+  // Compact roster of his open tasks, by [n] ref — Claude matches against these
+  // and echoes the ref back, so task ids never round-trip through the model.
+  const roster = (Array.isArray(tasks) ? tasks : [])
+    .slice(0, 60)
+    .map((t: any) =>
+      `[${t.ref}] "${t.title}" — ${t.date || 'no date'}${t.time ? ` ${t.time}` : ' (anytime)'}${t.durationMin ? ` (${t.durationMin} min)` : ''}`)
+    .join('\n')
+
+  const system = `You are the A.I. assistant inside Sentinel, Chris's daily command center. Turn his note into exactly ONE structured command. Today is ${today || '(unknown)'}${weekday ? ` (${weekday})` : ''}${nowTime ? `, current time ${nowTime}` : ''}, in his local timezone.
+
+His current open tasks are listed with [n] refs. Choose the intent:
+- "update" — the note changes an existing task: move / push / reschedule / retime / rename / change duration. Match by title words and context (a time like "my 2pm edit" narrows it). Return its taskRef and ONLY the fields that change; leave the rest "" (or 0 for durationMin).
+- "complete" — the note says an existing task is done / finished / handled / to check off. Return its taskRef.
+- "create" — the note describes a NEW task that doesn't refer to any listed one.
+- "none" — nothing actionable, or two or more tasks match equally well. Never guess between plausible matches: say in note which ones were ambiguous so he can be specific.
 
 Rules:
-- Resolve relative dates against today: "today", "tomorrow", "next Tuesday", "the 15th" → a concrete YYYY-MM-DD. If no date is implied at all, leave date "".
-- If a time is given, use 12-hour like "2:00 PM". If none, leave time "".
-- If he gives a time but no date, assume today (or tomorrow if that time already passed today).
-- durationMin: use what he says ("2h" → 120, "45 min" → 45); otherwise 30.
-- subtasks: if he lists steps ("with subtasks a, b, c" or "steps: …"), split them into short titles; otherwise [].
-- reminder: true only if he explicitly wants to be reminded/alerted; otherwise false.
-- title: the core task, cleaned of the date/time/subtask phrasing.
-Return exactly one task.`
+- Resolve relative dates against today: "today", "tomorrow", "Friday", "the 15th" → concrete YYYY-MM-DD.
+- Times are 12-hour like "4:00 PM". A bare number ("push it to 4") means the sensible clock reading for that task — an afternoon task moved "to 4" means 4:00 PM.
+- If he gives a time but no date for a create, assume today (or tomorrow if that time already passed today).
+- create durationMin: what he says ("2h" → 120, "45 min" → 45); otherwise 30.
+- note: one concrete sentence naming the actual task and the change. He reads it as the confirmation, so a vague note is a useless one.`
 
   try {
     const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY })
@@ -68,22 +89,27 @@ Return exactly one task.`
       max_tokens: 1024,
       system,
       output_config: { format: { type: 'json_schema', schema: SCHEMA } },
-      messages: [{ role: 'user', content: String(text).trim() }],
+      messages: [{
+        role: 'user',
+        content: `${roster ? `Chris's current open tasks:\n${roster}\n\n` : 'Chris has no open tasks listed.\n\n'}His note: ${String(text).trim()}`,
+      }],
     })
     const raw = res.content.find((b: any) => b.type === 'text')?.text ?? '{}'
     const p = JSON.parse(raw)
-    // Empty strings → null; hand back app-shaped fields the task form understands.
     return json({
-      task: {
+      command: {
+        intent: p.intent || 'none',
+        taskRef: Number.isInteger(p.taskRef) ? p.taskRef : -1,
         title: p.title || '',
         date: p.date || null,
         time: p.time || null,
-        durationMin: Number(p.durationMin) || 30,
+        durationMin: Number(p.durationMin) || 0,
         subtasks: Array.isArray(p.subtasks) ? p.subtasks.filter(Boolean) : [],
         reminder: Boolean(p.reminder),
+        note: p.note || '',
       },
     })
   } catch (e) {
-    return json({ error: `Couldn't parse that — try rephrasing, or add it manually. (${(e as Error).message})` }, 502)
+    return json({ error: `Couldn't read that — try rephrasing. (${(e as Error).message})` }, 502)
   }
 })
