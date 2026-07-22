@@ -358,6 +358,8 @@ export default function App() {
             onToggleReminder={toggleReminder}
             onSnooze={snoozeTask}
             onUnsnooze={unsnoozeTask}
+            onDelete={deleteTask}
+            onDeleteSeries={deleteSeries}
             highlightId={highlightTaskId}
             selectedDate={selectedDate}
             onChangeDate={setSelectedDate}

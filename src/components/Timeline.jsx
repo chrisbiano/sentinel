@@ -146,6 +146,15 @@ function EditIcon() {
   )
 }
 
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6" />
+    </svg>
+  )
+}
+
 // Minutes past midnight for a time label. Handles "2:00 PM", "2:00 p.m.", and
 // bare 24-hour "14:00". Anything unparseable sorts to the END of the day, never
 // the top — a broken time should sink, not leap above a real noon task.
@@ -204,6 +213,8 @@ export default function Timeline({
   onToggleReminder,
   onSnooze,
   onUnsnooze,
+  onDelete,
+  onDeleteSeries,
   highlightId,
   view,
   onChangeView,
@@ -213,6 +224,7 @@ export default function Timeline({
   const [addingTask, setAddingTask] = useState(false)
   const [snoozeFor, setSnoozeFor] = useState(null)  // task id whose snooze picker is open
   const [editingTask, setEditingTask] = useState(null)  // full task being edited in the form
+  const [confirmDelete, setConfirmDelete] = useState(null)  // repeating task id awaiting delete choice
 
   // Event handlers take the block's context, not just its id, so the saved note
   // stays readable even if the event later disappears from Google.
@@ -261,6 +273,7 @@ export default function Timeline({
       remindAt: t.remindAt,            // for snoozed-vs-scheduled detection
       date: t.date,
       reminderLeadMin: t.reminderLeadMin,
+      seriesId: t.seriesId,            // repeating tasks confirm before deleting
       done: t.completed,
       subtasks: t.subtasks || [],
     })),
@@ -437,6 +450,19 @@ export default function Timeline({
                 <EditIcon />
               </button>
             )}
+            {onDelete && (
+              <button
+                onClick={() =>
+                  item.seriesId
+                    ? setConfirmDelete(confirmDelete === item.rawId ? null : item.rawId)
+                    : onDelete(item.rawId)}
+                aria-label="Delete task"
+                title="Delete"
+                className="w-6 h-6 flex items-center justify-center rounded-md text-faint hover:text-fg hover:bg-surface2 transition-colors"
+              >
+                <TrashIcon />
+              </button>
+            )}
           </span>
         )}
         {item.subtasks.length > 0 && (
@@ -546,6 +572,33 @@ export default function Timeline({
           >
             Undo
           </button>
+        </div>
+      )}
+
+      {/* Repeating task: delete just this occurrence, or stop the series here. */}
+      {item.kind === 'task' && confirmDelete === item.rawId && (
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs text-muted">This task repeats — delete…</span>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => { onDelete(item.rawId); setConfirmDelete(null) }}
+              className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg transition-colors"
+            >
+              Just this one
+            </button>
+            <button
+              onClick={() => { onDeleteSeries(item.seriesId, item.date); setConfirmDelete(null) }}
+              className="text-xs px-2.5 py-1 rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
+            >
+              This & all future
+            </button>
+            <button
+              onClick={() => setConfirmDelete(null)}
+              className="text-xs text-faint hover:text-fg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>
