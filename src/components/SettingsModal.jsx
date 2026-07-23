@@ -22,6 +22,13 @@ function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, o
   // the saved value loads or changes.
   const [timeDraft, setTimeDraft] = useState(briefTime)
   const [savedNote, setSavedNote] = useState(false)
+  // The OS-level notification permission (granted | denied | default). iOS only
+  // shows its prompt once — after that, a re-attempt resolves to the remembered
+  // value WITHOUT re-prompting, which reads as "the button blipped and nothing
+  // happened". Surfacing this lets Chris (and us) see why, since DevTools isn't
+  // an option on his phone.
+  const readPerm = () => (typeof Notification !== 'undefined' ? Notification.permission : 'unsupported')
+  const [perm, setPerm] = useState(readPerm)
 
   useEffect(() => {
     currentSubscription().then(sub => setEnabled(Boolean(sub))).catch(() => {})
@@ -44,7 +51,7 @@ function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, o
       setNote('Notifications are on for this device.')
     } catch (e) {
       setError(e.message || 'Could not enable notifications')
-    } finally { setBusy(false) }
+    } finally { setBusy(false); setPerm(readPerm()) }
   }
 
   const disable = async () => {
@@ -171,8 +178,28 @@ function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, o
         </>
       )}
 
-      {note && <p className="text-xs text-fg mt-2">{note}</p>}
-      {error && <p className="text-xs text-muted mt-2">{error}</p>}
+      {note && <p className="text-sm text-fg mt-3">{note}</p>}
+
+      {error && (
+        <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+          <p className="text-sm text-fg">{error}</p>
+          {perm === 'denied' && (
+            <p className="text-xs text-muted mt-1.5">
+              iOS is blocking notifications for Sentyra and won’t ask again. To reset it:
+              delete Sentyra from your Home Screen, re-add it from Safari (Share → Add to
+              Home Screen), open it once, then turn this on and tap <span className="text-fg">Allow</span>.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Always-visible permission state when off — a quiet diagnostic so a silent
+          failure is never invisible. */}
+      {!enabled && status !== 'ios-needs-install' && status !== 'unsupported' && (
+        <p className="text-[11px] text-faint mt-2">
+          Permission: <span className="text-muted">{perm}</span>
+        </p>
+      )}
     </div>
   )
 }
