@@ -44,7 +44,11 @@ function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, o
   if (!isPushConfigured) return null
 
   const enable = async () => {
-    setBusy(true); setError(null); setNote(null)
+    setBusy(true); setError(null)
+    // Prime the OS prompt: it's drawn by the browser (small dropdown near the
+    // address bar on desktop, a dialog on iPhone) and can't be restyled, so tell
+    // the user to expect it — an ignored prompt is what got us stuck on 'denied'.
+    setNote('Your browser is asking permission now — look for its prompt and choose “Allow”.')
     try {
       await enablePush()
       setEnabled(true)
