@@ -206,14 +206,34 @@ export default function App() {
   // without a tap. Refs (not ids) round-trip through the model; mapped back here.
   const runAssistant = async (text) => {
     const now = new Date()
+    const todayISO = toISODate(now)
     // Open tasks plus the last few days' COMPLETED ones — "add my X from today
     // to tomorrow" is most natural right after finishing X, so done tasks stay
     // referenceable (the model sees them marked done and can duplicate them).
     const doneCutoff = toISODate(new Date(Date.now() - 3 * 86_400_000))
-    const rosterTasks = [
+    const candidates = [
       ...tasks.filter(t => !t.completed),
       ...tasks.filter(t => t.completed && t.date && t.date >= doneCutoff),
-    ].slice(0, 60)
+    ]
+    // A daily repeat materializes ~90 open occurrences — left alone they flood
+    // the 60-slot roster and push everything else out (this actually happened).
+    // Collapse each series to one representative: its nearest occurrence on or
+    // after today, else its latest past one.
+    const bySeries = new Map()
+    for (const t of candidates) {
+      if (!t.seriesId) continue
+      const cur = bySeries.get(t.seriesId)
+      const better = !cur
+        || (t.date >= todayISO && (cur.date < todayISO || t.date < cur.date))
+        || (t.date < todayISO && cur.date < todayISO && t.date > cur.date)
+      if (better) bySeries.set(t.seriesId, t)
+    }
+    // Nearest-to-today first, so the 60 cap can never cut today's tasks.
+    const dist = (iso) => Math.abs(new Date(`${iso ?? todayISO}T00:00:00`) - new Date(`${todayISO}T00:00:00`))
+    const rosterTasks = candidates
+      .filter(t => !t.seriesId || bySeries.get(t.seriesId) === t)
+      .sort((a, b) => dist(a.date) - dist(b.date))
+      .slice(0, 60)
     const roster = rosterTasks.map((t, i) => ({
       ref: i, title: t.title, date: t.date, time: t.time, durationMin: t.duration,
       completed: t.completed,
