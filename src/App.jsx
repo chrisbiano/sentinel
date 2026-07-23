@@ -181,10 +181,29 @@ export default function App() {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  // Canonical "h:mm AM/PM" from whatever the model emitted ("2:30", "14:30",
+  // "2:30pm"). A bare hour with no meridiem gets the daytime reading — "2:30"
+  // means 2:30 PM; nobody schedules 2:30 AM by accident.
+  const normalizeTime = (s) => {
+    const m = String(s || '').trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?$/i)
+    if (!m) return String(s || '') || null
+    let h = Number(m[1])
+    const mm = m[2] ?? '00'
+    const ap = m[3]?.toLowerCase()
+    if (ap) {
+      h = h % 12
+      if (ap.startsWith('p')) h += 12
+    } else if (h <= 6) {
+      h += 12
+    }
+    const h12 = h % 12 === 0 ? 12 : h % 12
+    return `${h12}:${mm} ${h < 12 || h === 24 ? 'AM' : 'PM'}`
+  }
+
   // The A.I. assistant: send a plain-language note plus a compact roster of open
-  // tasks; Claude returns ONE structured command — create / update / complete —
-  // which the launcher shows for confirmation. Nothing applies without a tap.
-  // Refs (not ids) round-trip through the model; we map them back here.
+  // tasks; Claude returns ONE structured command — create / update / complete /
+  // duplicate — which the launcher shows for confirmation. Nothing applies
+  // without a tap. Refs (not ids) round-trip through the model; mapped back here.
   const runAssistant = async (text) => {
     const now = new Date()
     const openTasks = tasks.filter(t => !t.completed).slice(0, 60)
@@ -214,7 +233,16 @@ export default function App() {
       return { intent: 'create', title: p.title, date: p.date, time: p.time, durationMin: p.durationMin, subtasks: p.subtasks || [], reminder: p.reminder, note: '', task: null }
     }
     const c = data.command
-    return { ...c, task: c.taskRef >= 0 ? (openTasks[c.taskRef] ?? null) : null }
+    const src = c.taskRef >= 0 ? (openTasks[c.taskRef] ?? null) : null
+    // Defensive time hygiene, whatever the model emitted: canonical AM/PM form,
+    // and a duplicate whose time matches the source's clock reading (meridiem
+    // aside) means "same time" — drop it so the original's time is kept.
+    let time = c.time ? normalizeTime(c.time) : null
+    if (c.intent === 'duplicate' && time && src?.time) {
+      const clock = (x) => String(x).replace(/\s*[AP]\.?M\.?$/i, '').trim()
+      if (clock(time) === clock(src.time)) time = null
+    }
+    return { ...c, time, task: src }
   }
 
   // Resolve a reminder deep-link once the task is known: focus its day, scroll to

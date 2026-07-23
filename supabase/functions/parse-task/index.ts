@@ -21,6 +21,25 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
 
+// Canonical "h:mm AM/PM" from whatever the model emitted ("2:30", "14:30",
+// "2:30pm"). A bare hour with no meridiem gets the daytime reading — "2:30"
+// means 2:30 PM; nobody schedules 2:30 AM by accident.
+function normalizeTime(s: string): string {
+  const m = String(s || '').trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?$/i)
+  if (!m) return String(s || '')
+  let h = Number(m[1])
+  const mm = m[2] ?? '00'
+  const ap = m[3]?.toLowerCase()
+  if (ap) {
+    h = h % 12
+    if (ap.startsWith('p')) h += 12
+  } else if (h <= 6) {
+    h += 12
+  }
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${mm} ${h < 12 ? 'AM' : 'PM'}`
+}
+
 const SCHEMA = {
   type: 'object',
   properties: {
@@ -77,11 +96,15 @@ His current open tasks are listed with [n] refs. Choose the intent:
 - "none" — nothing actionable, or two or more tasks match equally well. Never guess between plausible matches: say in note which ones were ambiguous so he can be specific.
 
 Rules:
+- If the note says "my X task" (or clearly names a listed task), the intent is NEVER "create" — it's update, duplicate, or complete.
 - Resolve relative dates against today: "today", "tomorrow", "Friday", "the 15th" → concrete YYYY-MM-DD.
-- Times are 12-hour like "4:00 PM". A bare number ("push it to 4") means the sensible clock reading for that task — an afternoon task moved "to 4" means 4:00 PM.
+- Times are 12-hour and MUST include AM or PM — never a bare "2:30". A bare number ("push it to 4") means the sensible clock reading for that task — an afternoon task moved "to 4" means 4:00 PM.
+- "at the same time" / "same time" on a duplicate means time "" — keep the original's time; never restate it.
 - If he gives a time but no date for a create, assume today (or tomorrow if that time already passed today).
 - create durationMin: what he says ("2h" → 120, "45 min" → 45); otherwise 30.
-- note: one concrete sentence naming the actual task and the change. He reads it as the confirmation, so a vague note is a useless one.`
+- note: one concrete sentence naming the actual task and the change. He reads it as the confirmation, so a vague note is a useless one.
+
+Example: "add my soundbetter task from today to tomorrow as well at the same time" → intent "duplicate", taskRef of the soundbetter task, date = tomorrow, time "".`
 
   try {
     const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY })
@@ -97,13 +120,27 @@ Rules:
     })
     const raw = res.content.find((b: any) => b.type === 'text')?.text ?? '{}'
     const p = JSON.parse(raw)
+
+    // Time hygiene, whatever the model emitted: canonical AM/PM form, and a
+    // duplicate whose time matches the source's clock reading (meridiem aside)
+    // means "same time" — drop it so the original's time is kept.
+    const ref = Number.isInteger(p.taskRef) ? p.taskRef : -1
+    let time = p.time ? normalizeTime(p.time) : ''
+    if (p.intent === 'duplicate' && time && ref >= 0) {
+      const src = (Array.isArray(tasks) ? tasks : []).find((t: any) => t.ref === ref)
+      if (src?.time) {
+        const clock = (x: string) => String(x).replace(/\s*[AP]\.?M\.?$/i, '').trim()
+        if (clock(time) === clock(normalizeTime(src.time))) time = ''
+      }
+    }
+
     return json({
       command: {
         intent: p.intent || 'none',
-        taskRef: Number.isInteger(p.taskRef) ? p.taskRef : -1,
+        taskRef: ref,
         title: p.title || '',
         date: p.date || null,
-        time: p.time || null,
+        time: time || null,
         durationMin: Number(p.durationMin) || 0,
         subtasks: Array.isArray(p.subtasks) ? p.subtasks.filter(Boolean) : [],
         reminder: Boolean(p.reminder),
