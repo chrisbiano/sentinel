@@ -82,7 +82,17 @@ function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, o
     setBusy(true); setError(null); setNote(null)
     try {
       const r = await sendTestPush()
-      setNote(`Test sent to ${r.sent} device${r.sent === 1 ? '' : 's'} — check your phone.`)
+      const dev = `${r.devices} device${r.devices === 1 ? '' : 's'}`
+      if (r.sent === 0) {
+        // The push service rejected every attempt — a delivery problem, not an
+        // OS-display one. Usually a stale/expired subscription.
+        setError(`Reached ${dev}, but the push service didn’t accept it. Turn notifications off and back on to refresh this device, then retry.`)
+      } else {
+        // Accepted for delivery. If it still didn't appear, the OS is hiding it.
+        setNote(
+          `Sent to ${r.sent} of ${dev}. If nothing showed up on this Mac, macOS is hiding it — open System Settings → Notifications → your browser (Chrome/Safari), turn Allow Notifications on, and make sure Focus / Do Not Disturb is off. On iPhone it should just appear.`,
+        )
+      }
     } catch (e) {
       setError(e.message || 'Could not send a test')
     } finally { setBusy(false) }
