@@ -131,9 +131,15 @@ export default function WeekView({
                       ) : (
                         <span className="mt-1 w-1.5 h-1.5 rounded-full bg-fg shrink-0" />
                       )}
-                      <span className={`text-xs leading-tight ${item.done ? 'line-through text-faint' : 'text-muted'}`}>
+                      {/* Tap-through: the week is an overview — edit/delete/
+                          reminder controls live on the day, so any title opens it. */}
+                      <button
+                        onClick={() => { onChangeDate(day); onChangeView('day') }}
+                        title="Open this day"
+                        className={`text-left text-xs leading-tight hover:text-fg transition-colors ${item.done ? 'line-through text-faint' : 'text-muted'}`}
+                      >
                         {item.title}
-                      </span>
+                      </button>
                     </div>
                   ))
                 )}
