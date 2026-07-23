@@ -4,7 +4,7 @@ import { startGoogleConnect, isConnectConfigured } from '../lib/connect'
 import useConnectedAccounts from '../hooks/useConnectedAccounts'
 import {
   isPushConfigured, pushStatus, currentSubscription,
-  enablePush, disablePush, sendTestPush,
+  enablePush, disablePush, sendTestPush, isIOS,
 } from '../lib/push'
 
 /* Turn Web Push on for this device, and prove it works with a test ping before
@@ -29,6 +29,15 @@ function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, o
   // an option on his phone.
   const readPerm = () => (typeof Notification !== 'undefined' ? Notification.permission : 'unsupported')
   const [perm, setPerm] = useState(readPerm)
+  // Pre-permission step: on "Turn on" we first show an explainer (what to look
+  // for, where, tap Allow) instead of firing the OS prompt cold — an unexpected
+  // prompt is what people wave away, which lands us in 'denied'.
+  const [priming, setPriming] = useState(false)
+  // Where the browser draws its prompt differs by platform; name it so the user
+  // knows where to look.
+  const promptWhere = isIOS()
+    ? 'a popup will appear in the middle of your screen'
+    : 'your browser will ask at the top of the window, near the web address'
 
   useEffect(() => {
     currentSubscription().then(sub => setEnabled(Boolean(sub))).catch(() => {})
@@ -107,7 +116,7 @@ function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, o
               </p>
             </div>
             <button
-              onClick={enabled ? disable : enable}
+              onClick={enabled ? disable : () => { setError(null); setNote(null); setPriming(true) }}
               disabled={busy}
               className={`px-3 py-1.5 text-sm rounded-lg font-medium shrink-0 transition-opacity disabled:opacity-50 ${
                 enabled
@@ -118,6 +127,54 @@ function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, o
               {busy ? '…' : enabled ? 'Turn off' : 'Turn on'}
             </button>
           </div>
+
+          {/* Pre-permission explainer — tells the user exactly what's about to
+              happen so they don't ignore the browser's prompt. */}
+          {priming && !enabled && (
+            <div className="mt-3 rounded-lg border border-line2 bg-surface2 px-3 py-3">
+              {perm === 'denied' ? (
+                <>
+                  <p className="text-sm text-fg font-medium">Notifications are blocked</p>
+                  <p className="text-xs text-muted mt-1">
+                    {isIOS()
+                      ? 'iOS won’t ask again until you reinstall: delete Sentyra from your Home Screen, re-add it from Safari (Share → Add to Home Screen), open it once, then tap Turn on and choose Allow.'
+                      : 'Your browser is remembering “no.” Click the icon just left of the web address, set Notifications to Allow, reload, then tap Turn on again.'}
+                  </p>
+                  <button
+                    onClick={() => setPriming(false)}
+                    className="mt-3 px-3 py-1.5 text-sm rounded-lg font-medium border border-line2 text-muted hover:text-fg hover:bg-surface2"
+                  >
+                    Got it
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-fg font-medium">One quick step</p>
+                  <p className="text-xs text-muted mt-1">
+                    When you tap Continue, {promptWhere}. Choose{' '}
+                    <span className="text-fg font-medium">“Allow.”</span> If you ignore or dismiss
+                    it, {isIOS() ? 'iOS' : 'the browser'} stops asking and notifications stay off.
+                  </p>
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => { setPriming(false); enable() }}
+                      disabled={busy}
+                      className="px-3 py-1.5 text-sm rounded-lg font-medium bg-accent text-accent-fg hover:opacity-90 disabled:opacity-50"
+                    >
+                      Continue
+                    </button>
+                    <button
+                      onClick={() => setPriming(false)}
+                      disabled={busy}
+                      className="px-3 py-1.5 text-sm rounded-lg font-medium border border-line2 text-muted hover:text-fg hover:bg-surface2"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {enabled && (
             <button
