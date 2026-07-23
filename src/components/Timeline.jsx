@@ -325,13 +325,11 @@ export default function Timeline({
     }
   }
 
-  // A block gets an outline box if it's a timed task (every work session is
-  // confined in its own stroke, showing its start→end), or runs long (≥2h), or
-  // wraps a real item. A boxed block nested inside a bigger box doesn't get its
-  // own (one level).
+  // Every timed item — task or event — gets an outline box: each block on the
+  // rail is confined in its own stroke showing its start→end. A block nested
+  // inside a bigger one doesn't get its own box (it rides inside as a row).
   const blocks = spans.filter(b => (b.duration || 0) > 0)
-  const boxable = blocks.filter(b => b.kind === 'task' || b.duration >= 120 || spans.some(x => contains(b, x)))
-  const boxBlocks = boxable.filter(b => !boxable.some(o => contains(o, b)))
+  const boxBlocks = blocks.filter(b => !blocks.some(o => contains(o, b)))
 
   // A row belongs to a box if it starts strictly inside the box (an item must
   // also END inside — a thing that runs past the block is a conflict, not a
