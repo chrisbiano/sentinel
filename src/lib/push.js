@@ -42,16 +42,50 @@ export function pushStatus() {
   return 'ready'
 }
 
+// Reject after `ms` instead of hanging forever. iOS is the reason this exists:
+// on a freshly installed PWA, `serviceWorker.ready` and the permission prompt can
+// stay pending on the first session until the app is closed and reopened — which
+// left the "Turn on" button stuck on a grey "…" with no way out.
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ])
+}
+
+const REOPEN_HINT =
+  'Notifications aren’t ready yet — Sentyra is still finishing setup after being added to your Home Screen. Fully close the app (swipe it away in the app switcher) and reopen it, then try again.'
+
+// Get an active service-worker registration we can subscribe against. On a fresh
+// install the `load`-time registration may not have run in this context yet, so
+// (re)register first — it's a no-op if already registered — then wait for ready,
+// but never longer than the timeout.
+async function readyRegistration(ms = 8000) {
+  try { await navigator.serviceWorker.register('/sw.js') } catch { /* ready may still resolve */ }
+  return withTimeout(navigator.serviceWorker.ready, ms, REOPEN_HINT)
+}
+
 export async function currentSubscription() {
   if (!('serviceWorker' in navigator)) return null
-  const reg = await navigator.serviceWorker.ready
-  return reg.pushManager.getSubscription()
+  // Used on mount to show on/off state — must never hang, so on timeout just
+  // report "no subscription" rather than freezing the settings panel.
+  try {
+    const reg = await withTimeout(navigator.serviceWorker.ready, 6000, 'sw-not-ready')
+    return reg.pushManager.getSubscription()
+  } catch {
+    return null
+  }
 }
 
 // Ask permission, subscribe this device, and save it. Returns the subscription
-// or throws with a message the UI can show.
+// or throws with a message the UI can show. Every await is bounded so the caller
+// can always leave the busy state.
 export async function enablePush() {
-  const permission = await Notification.requestPermission()
+  const permission = await withTimeout(
+    Notification.requestPermission(),
+    30000,
+    'The notification permission prompt didn’t respond. Fully close Sentyra and reopen it, then try again.',
+  )
   if (permission !== 'granted') {
     throw new Error(
       permission === 'denied'
@@ -60,16 +94,24 @@ export async function enablePush() {
     )
   }
 
-  const reg = await navigator.serviceWorker.ready
+  const reg = await readyRegistration()
   let sub = await reg.pushManager.getSubscription()
   if (!sub) {
-    sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-    })
+    sub = await withTimeout(
+      reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      }),
+      15000,
+      'Couldn’t register this device for notifications. Fully close Sentyra and reopen it, then try again.',
+    )
   }
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user } } = await withTimeout(
+    supabase.auth.getUser(),
+    10000,
+    'Couldn’t confirm you’re signed in (network may be slow). Try again in a moment.',
+  )
   if (!user) throw new Error('Not signed in')
 
   const j = sub.toJSON()
