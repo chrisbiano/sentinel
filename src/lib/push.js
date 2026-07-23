@@ -55,7 +55,7 @@ export async function enablePush() {
   if (permission !== 'granted') {
     throw new Error(
       permission === 'denied'
-        ? 'Notifications are blocked for Sentinel in your settings.'
+        ? 'Notifications are blocked for Sentyra in your settings.'
         : 'Notification permission was dismissed.',
     )
   }

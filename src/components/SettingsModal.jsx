@@ -9,7 +9,7 @@ import {
 
 /* Turn Web Push on for this device, and prove it works with a test ping before
    any reminder depends on it. The iOS reality is baked in: on iPhone, push only
-   works once Sentinel is installed to the home screen, so a Safari tab is
+   works once Sentyra is installed to the home screen, so a Safari tab is
    guided to install rather than shown a button that can't work. */
 function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, onBriefTimeChange }) {
   const [status] = useState(pushStatus)      // ready | ios-needs-install | unsupported | unconfigured
@@ -74,14 +74,14 @@ function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, o
 
       {status === 'ios-needs-install' ? (
         <p className="text-xs text-muted">
-          To get reminders on your iPhone, first add Sentinel to your Home Screen:
+          To get reminders on your iPhone, first add Sentyra to your Home Screen:
           tap the <span className="text-fg">Share</span> button in Safari, then
-          <span className="text-fg"> Add to Home Screen</span>. Open Sentinel from
+          <span className="text-fg"> Add to Home Screen</span>. Open Sentyra from
           that icon and this option will turn on.
         </p>
       ) : status === 'unsupported' ? (
         <p className="text-xs text-muted">
-          This browser doesn’t support notifications. Try Sentinel on your phone
+          This browser doesn’t support notifications. Try Sentyra on your phone
           (installed to the Home Screen) or a recent desktop browser.
         </p>
       ) : (
@@ -92,7 +92,7 @@ function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, o
               <p className="text-xs text-faint mt-0.5">
                 {enabled
                   ? 'This device will receive reminder alerts.'
-                  : 'Turn on to let Sentinel alert you here.'}
+                  : 'Turn on to let Sentyra alert you here.'}
               </p>
             </div>
             <button
@@ -450,7 +450,7 @@ export default function SettingsModal({ open, onClose, settings, onChange, morni
                 <div className="min-w-0">
                   <p className="text-sm text-fg truncate">{email || 'Signed in'}</p>
                   <p className="text-xs text-faint mt-0.5">
-                    Your Sentinel login — this alone doesn't give access to any mail or calendar
+                    Your Sentyra login — this alone doesn't give access to any mail or calendar
                   </p>
                 </div>
                 <button
@@ -489,7 +489,7 @@ export default function SettingsModal({ open, onClose, settings, onChange, morni
                 </button>
               </div>
               <p className="text-xs text-faint mb-3">
-                Mailboxes Sentinel reads. Tell each one what it's for — that's what
+                Mailboxes Sentyra reads. Tell each one what it's for — that's what
                 Claude uses to tell a real ask from noise, and it reads them differently.
               </p>
 
@@ -517,7 +517,7 @@ export default function SettingsModal({ open, onClose, settings, onChange, morni
         </div>
 
         <div className="px-5 py-3 border-t border-line text-xs text-faint">
-          Sentinel · calendar read-only — your tokens never touch the browser
+          Sentyra · calendar read-only — your tokens never touch the browser
         </div>
       </div>
     </div>

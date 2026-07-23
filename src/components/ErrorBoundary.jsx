@@ -13,7 +13,7 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    console.error('Sentinel caught a render error:', error, info)
+    console.error('Sentyra caught a render error:', error, info)
   }
 
   render() {
@@ -23,7 +23,7 @@ export default class ErrorBoundary extends Component {
           <div className="card max-w-lg w-full text-center">
             <h1 className="text-lg font-medium mb-2">Something went wrong</h1>
             <p className="text-muted text-sm mb-4">
-              Sentinel hit an unexpected error. Your saved data is safe.
+              Sentyra hit an unexpected error. Your saved data is safe.
             </p>
             {/* Show the actual message — a generic apology helps nobody debug. */}
             <p className="text-xs text-muted text-left bg-surface2 border border-line rounded-lg p-3 mb-4 font-mono break-words">

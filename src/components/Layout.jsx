@@ -29,7 +29,7 @@ export default function Layout({ children, onOpenSettings, onRefresh, refreshing
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center gap-4">
             <div>
-              <h1 className="text-lg sm:text-xl font-medium tracking-tight text-fg">Sentinel</h1>
+              <h1 className="text-lg sm:text-xl font-medium tracking-tight text-fg">Sentyra</h1>
               <p className="text-muted text-xs sm:text-sm">Your daily command center</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -69,7 +69,7 @@ export default function Layout({ children, onOpenSettings, onRefresh, refreshing
       >
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <p className="text-faint text-sm text-center">
-            Sentinel · Keeping you on track, always
+            Sentyra · Keeping you on track, always
           </p>
         </div>
       </footer>

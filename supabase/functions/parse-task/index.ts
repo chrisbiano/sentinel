@@ -1,4 +1,4 @@
-// Sentinel — the A.I. assistant's brain. Turns a plain-language note into ONE
+// Sentyra — the A.I. assistant's brain. Turns a plain-language note into ONE
 // structured command: create a task, update an existing one, or complete one.
 // It only PROPOSES — the app shows the result and Chris confirms before anything
 // saves (create opens the pre-filled form; update/complete show a confirm card).
@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
       `[${t.ref}] "${t.title}" — ${t.date || 'no date'}${t.time ? ` ${t.time}` : ' (anytime)'}${t.durationMin ? ` (${t.durationMin} min)` : ''}${t.completed ? ' (done)' : ''}`)
     .join('\n')
 
-  const system = `You are the A.I. assistant inside Sentinel, Chris's daily command center. Turn his note into exactly ONE structured command. Today is ${today || '(unknown)'}${weekday ? ` (${weekday})` : ''}${nowTime ? `, current time ${nowTime}` : ''}, in his local timezone.
+  const system = `You are the A.I. assistant inside Sentyra, Chris's daily command center. Turn his note into exactly ONE structured command. Today is ${today || '(unknown)'}${weekday ? ` (${weekday})` : ''}${nowTime ? `, current time ${nowTime}` : ''}, in his local timezone.
 
 His current tasks are listed with [n] refs; ones marked (done) are already completed. Choose the intent:
 - "update" — the note changes an existing task IN PLACE: move / push / reschedule / retime / rename / change duration. The same task ends up somewhere else. Match by title words and context (a time like "my 2pm edit" narrows it). Return its taskRef and ONLY the fields that change; leave the rest "" (or 0 for durationMin).

@@ -1,4 +1,4 @@
-// Sentinel — deliver a Web Push notification to a user's devices.
+// Sentyra — deliver a Web Push notification to a user's devices.
 //
 // Deploy with "Verify JWT" ON. Needs secrets:
 //   VAPID_PRIVATE_KEY  (from .vapid.local.txt)
@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
   // Phase 2: a test ping to the caller's own devices.
   if (mode === 'test') {
     const result = await sendToUser(admin, u.user.id, {
-      title: 'Sentinel',
+      title: 'Sentyra',
       body: 'Notifications are on. This is your test ping. 🎯',
       tag: 'sentinel-test',
       url: '/',

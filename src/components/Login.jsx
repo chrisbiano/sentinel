@@ -32,7 +32,7 @@ export default function Login() {
       <div className="w-full max-w-sm text-center">
         <div className="flex items-center justify-center gap-2 mb-2">
           <span className="w-2 h-2 rounded-full bg-fg/70" />
-          <span className="text-sm font-medium tracking-[0.14em] uppercase">Sentinel</span>
+          <span className="text-sm font-medium tracking-[0.14em] uppercase">Sentyra</span>
         </div>
         <h1 className="text-xl font-medium tracking-tight mb-1">Your daily command center</h1>
         <p className="text-muted text-sm mb-8">Sign in to see your day.</p>
@@ -53,7 +53,7 @@ export default function Login() {
         )}
 
         <p className="text-faint text-xs mt-8">
-          Sentinel only reads what you allow, and your data stays yours.
+          Sentyra only reads what you allow, and your data stays yours.
         </p>
       </div>
     </div>
