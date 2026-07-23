@@ -8,14 +8,16 @@ function SunIcon() {
   )
 }
 
-/* The morning brief, pinned at the top of the dashboard until dismissed.
-   ↻ regenerates it from the current state of the day; ✕ dismisses until tomorrow. */
+/* The daily brief, pinned at the top of the dashboard until dismissed. It's a
+   living summary — it reflects the current time of day and refreshes as the day
+   goes on. ↻ regenerates it from the current state of the day; ✕ dismisses until
+   tomorrow. */
 export default function MorningBriefCard({ brief, loading, onRefresh, onDismiss }) {
   return (
     <div className="card card-border-accent flex items-start gap-3">
       <span className="text-fg mt-0.5 shrink-0"><SunIcon /></span>
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-faint uppercase tracking-wider mb-1">Your morning brief</p>
+        <p className="text-xs font-medium text-faint uppercase tracking-wider mb-1">Your daily brief</p>
         {loading && !brief ? (
           <p className="text-sm text-muted">Putting together your brief…</p>
         ) : (

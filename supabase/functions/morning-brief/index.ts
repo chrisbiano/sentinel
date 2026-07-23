@@ -1,4 +1,6 @@
-// Sentyra — generate today's morning brief for the signed-in user, on demand.
+// Sentyra — generate the signed-in user's daily brief, on demand. It's a living
+// summary that reflects the current time of day, so it's regenerated through the
+// day (on reopen after it goes stale), not written once at dawn.
 // The app shows it as a dismissible card at the top of the dashboard (it lives
 // there until dismissed), so the brief never depends on push delivery.
 //
@@ -42,6 +44,16 @@ async function freshAccessToken(admin: any, account: any) {
     expires_at: new Date(Date.now() + (j.expires_in ?? 3600) * 1000).toISOString(),
   }).eq('account_id', account.id)
   return j.access_token
+}
+
+// The user's current wall-clock time in their zone. Without this the brief has
+// no idea how far into the day it is, so it recaps the whole day as if it were
+// dawn — the only progress signal it otherwise has is which tasks are checked
+// off. Runs in UTC, so read the time through the zone via Intl.
+function localNow(tz: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true,
+  }).format(new Date())
 }
 
 // "YYYY-MM-DD" + 1 day (pure date arithmetic, no timezone involved).
@@ -132,7 +144,7 @@ Deno.serve(async (req) => {
   const events = await eventsToday(admin, userId, date, tz, wrapped)
 
   const facts = [
-    `Today's date: ${date}.`,
+    `Today's date: ${date}. Right now it is ${localNow(tz)}.`,
     events.length ? `Calendar today:\n${events.map((e) => `- ${e}`).join('\n')}` : 'Calendar today: nothing scheduled.',
     openTasks.length
       ? `Open tasks today:\n${openTasks.map((t: any) => `- ${t.title}${t.time ? ` (${t.time})` : ''}`).join('\n')}`
@@ -146,7 +158,7 @@ Deno.serve(async (req) => {
     const res = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 400,
-      system: `You write Chris's one-glance morning brief for Sentyra, his daily command center. He runs a video production company and plays in a band. Given the day's facts, write 2–4 short sentences (or tight lines) that tell him what matters today: the shape of his schedule, anything time-sensitive, and what's waiting on him. Anything marked (done) is already finished — never present it as pending or ahead; skip it or at most note it's handled. Warm, direct, concrete — name the actual things. No greeting like "Good morning", no filler, no markdown headers. If the day is light, say so briefly. Plain text only.`,
+      system: `You write Chris's one-glance daily brief for Sentyra, his daily command center. He runs a video production company and plays in a band. This is a LIVING brief he may open at any hour, and the current time is given — anchor everything to it. Speak to what's still ahead from now; do NOT recap the whole day as if it's morning. Anything scheduled before the current time has already passed — treat it as behind him (done or missed), not upcoming. Match the tone to the time of day: morning = the day ahead, midday/afternoon = what's left, evening = wrap-up (and a nod to tomorrow if today is basically done). Anything marked (done) is already finished — never present it as pending or ahead. Given the facts, write 2–4 short sentences (or tight lines) naming the actual things that matter right now: what's still on the schedule, anything time-sensitive, and what's waiting on him. Warm, direct, concrete. No greeting like "Good morning", no filler, no markdown headers. If little remains, say so briefly. Plain text only.`,
       messages: [{ role: 'user', content: facts }],
     })
     brief = (res.content.find((b: any) => b.type === 'text')?.text ?? '').trim()

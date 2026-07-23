@@ -321,7 +321,7 @@ export default function App() {
       refreshing={calendarLoading}
     >
       <main className="space-y-6">
-        {/* Morning brief — pinned at the very top until dismissed. */}
+        {/* Daily brief — pinned at the very top until dismissed. */}
         {showBrief && (
           <MorningBriefCard brief={brief} loading={briefLoading} onRefresh={refreshBrief} onDismiss={dismissBrief} />
         )}

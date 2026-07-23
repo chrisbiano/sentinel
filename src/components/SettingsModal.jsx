@@ -203,9 +203,9 @@ function NotificationsSection({ morningBrief, onMorningBriefChange, briefTime, o
             <div className="mt-4 pt-3 border-t border-line">
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-sm text-fg">Morning brief</p>
+                  <p className="text-sm text-fg">Daily brief</p>
                   <p className="text-xs text-faint mt-0.5">
-                    A summary of your day — schedule, tasks, and emails needing a reply.
+                    A running summary of your day — schedule, tasks, and emails needing a reply. Updates as the day goes on.
                   </p>
                 </div>
                 <Toggle checked={morningBrief} onChange={onMorningBriefChange} />
