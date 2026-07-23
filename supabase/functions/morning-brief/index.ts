@@ -69,7 +69,9 @@ function zonedMidnightUTC(localDate: string, tz: string): Date {
 }
 
 // Best-effort: the day's event titles + times across the user's calendars.
-async function eventsToday(admin: any, userId: string, localDate: string, tz: string) {
+// Events Chris has "wrapped up" in Sentinel (event_notes.done) are marked (done)
+// so the brief never presents a finished block as still ahead.
+async function eventsToday(admin: any, userId: string, localDate: string, tz: string, wrapped: Set<string>) {
   try {
     // The user's local day, as real UTC instants.
     const timeMin = zonedMidnightUTC(localDate, tz).toISOString()
@@ -91,7 +93,8 @@ async function eventsToday(admin: any, userId: string, localDate: string, tz: st
           .filter((e: any) => e.status !== 'cancelled' && e.start?.dateTime)
           .map((e: any) => {
             const t = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(new Date(e.start.dateTime))
-            return `${t} — ${e.summary || '(no title)'}`
+            const done = wrapped.has(`${acct.email}:${cal.id}:${e.id}`) ? ' (done)' : ''
+            return `${t} — ${e.summary || '(no title)'}${done}`
           })
       }))
       return evs.flat()
@@ -122,7 +125,11 @@ Deno.serve(async (req) => {
   const { count: needReply } = await admin
     .from('email_verdicts').select('*', { count: 'exact', head: true })
     .eq('user_id', userId).eq('action', 'reply').is('handled_at', null)
-  const events = await eventsToday(admin, userId, date, tz)
+  // Events he's already wrapped up in Sentinel — marked (done) in the roster.
+  const { data: wrappedRows } = await admin
+    .from('event_notes').select('event_id').eq('user_id', userId).eq('done', true)
+  const wrapped = new Set((wrappedRows ?? []).map((w: any) => w.event_id))
+  const events = await eventsToday(admin, userId, date, tz, wrapped)
 
   const facts = [
     `Today's date: ${date}.`,
@@ -139,7 +146,7 @@ Deno.serve(async (req) => {
     const res = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 400,
-      system: `You write Chris's one-glance morning brief for Sentinel, his daily command center. He runs a video production company and plays in a band. Given the day's facts, write 2–4 short sentences (or tight lines) that tell him what matters today: the shape of his schedule, anything time-sensitive, and what's waiting on him. Warm, direct, concrete — name the actual things. No greeting like "Good morning", no filler, no markdown headers. If the day is light, say so briefly. Plain text only.`,
+      system: `You write Chris's one-glance morning brief for Sentinel, his daily command center. He runs a video production company and plays in a band. Given the day's facts, write 2–4 short sentences (or tight lines) that tell him what matters today: the shape of his schedule, anything time-sensitive, and what's waiting on him. Anything marked (done) is already finished — never present it as pending or ahead; skip it or at most note it's handled. Warm, direct, concrete — name the actual things. No greeting like "Good morning", no filler, no markdown headers. If the day is light, say so briefly. Plain text only.`,
       messages: [{ role: 'user', content: facts }],
     })
     brief = (res.content.find((b: any) => b.type === 'text')?.text ?? '').trim()

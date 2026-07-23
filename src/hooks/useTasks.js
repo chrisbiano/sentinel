@@ -356,7 +356,15 @@ export default function useTasks() {
     if (!t) return
     const next = !t.completed
     setTasks(prev => prev.map(x => (x.id === id ? { ...x, completed: next } : x)))
-    if (isSupabaseConfigured) updateTaskRow(id, { completed: next }).catch(e => console.error(e))
+    if (isSupabaseConfigured) {
+      // Verified, not fire-and-forget: a silently-failed check-off leaves the
+      // app and the database disagreeing (and the brief trusting the database).
+      updateTaskRow(id, { completed: next }).catch(e => {
+        console.error('Complete failed:', e)
+        setTasks(prev => prev.map(x => (x.id === id ? { ...x, completed: !next } : x)))
+        setError(`Couldn't save that check-off: ${e.message}`)
+      })
+    }
   }, [])
 
   const toggleSubtask = useCallback((taskId, subId) => {
