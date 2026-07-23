@@ -204,9 +204,47 @@ export default function useTasks() {
     if (isSupabaseConfigured) updateTaskRow(id, patch).catch(e => console.error('Update failed:', e))
   }, [])
 
+  // Deleting is instant, but undoable for a few seconds — one tap on the trash
+  // shouldn't be able to permanently destroy a task with its subtasks.
+  const [undoableDelete, setUndoableDelete] = useState(null)   // { task } | null
+  const undoDeleteTimer = useRef(null)
+  useEffect(() => () => { if (undoDeleteTimer.current) clearTimeout(undoDeleteTimer.current) }, [])
+
   const deleteTask = useCallback((id) => {
-    setTasks(prev => prev.filter(t => t.id !== id))
+    const t = tasksRef.current.find(x => x.id === id)
+    setTasks(prev => prev.filter(x => x.id !== id))
     if (isSupabaseConfigured) deleteTaskRow(id).catch(e => console.error('Delete failed:', e))
+    if (t) {
+      if (undoDeleteTimer.current) clearTimeout(undoDeleteTimer.current)
+      setUndoableDelete({ task: t })
+      undoDeleteTimer.current = setTimeout(() => setUndoableDelete(null), 6000)
+    }
+  }, [])
+
+  // Bring the just-deleted task back (re-inserted, so it gets a fresh id but
+  // keeps everything else — subtasks, reminder settings, even its series link).
+  const undoDelete = useCallback(async () => {
+    const entry = undoableDelete
+    if (!entry) return
+    setUndoableDelete(null)
+    if (undoDeleteTimer.current) clearTimeout(undoDeleteTimer.current)
+    const { id: _oldId, remindAt: _ra, position: _pos, ...rest } = entry.task
+    if (isSupabaseConfigured) {
+      try {
+        const created = await insertTask(rest, userIdRef.current)
+        setTasks(prev => [...prev, created])
+      } catch (e) {
+        console.error('Undo delete failed:', e)
+        setError('Could not restore the task')
+      }
+    } else {
+      setTasks(prev => [...prev, { ...rest, id: Date.now() }])
+    }
+  }, [undoableDelete])
+
+  const dismissUndoDelete = useCallback(() => {
+    if (undoDeleteTimer.current) clearTimeout(undoDeleteTimer.current)
+    setUndoableDelete(null)
   }, [])
 
   // Persist a drag-reorder of the task list: give the reordered ids sequential
@@ -279,6 +317,7 @@ export default function useTasks() {
   return {
     tasks, loading, error, clearError: () => setError(null),
     addTask, updateTask, deleteTask, deleteSeries, duplicateTask, reorderTasks,
+    undoableDelete, undoDelete, dismissUndoDelete,
     toggleReminder, snoozeTask, unsnoozeTask, toggleComplete, toggleSubtask,
   }
 }

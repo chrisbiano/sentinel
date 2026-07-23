@@ -34,6 +34,9 @@ export default function App() {
     deleteSeries,
     duplicateTask,
     reorderTasks,
+    undoableDelete,
+    undoDelete,
+    dismissUndoDelete,
     toggleReminder,
     snoozeTask,
     unsnoozeTask,
@@ -460,6 +463,13 @@ export default function App() {
         undoable={emailUndoable}
         onUndo={undoEmail}
         onDismiss={dismissEmailUndo}
+      />
+
+      {/* Undo for a just-deleted task — same net the email actions have. */}
+      <UndoToast
+        undoable={undoableDelete ? { label: `Deleted “${undoableDelete.task.title}”` } : null}
+        onUndo={undoDelete}
+        onDismiss={dismissUndoDelete}
       />
     </Layout>
   )
