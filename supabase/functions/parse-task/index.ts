@@ -25,13 +25,13 @@ const SCHEMA = {
   type: 'object',
   properties: {
     intent: {
-      type: 'string', enum: ['create', 'update', 'complete', 'none'],
-      description: 'create a new task; update an existing task; complete (check off) an existing task; none if nothing actionable or the match is too ambiguous',
+      type: 'string', enum: ['create', 'update', 'complete', 'duplicate', 'none'],
+      description: 'create a new task; update an existing task; complete (check off) an existing task; duplicate an existing task onto another day/time; none if nothing actionable or the match is too ambiguous',
     },
-    taskRef: { type: 'integer', description: 'For update/complete: the [n] ref of the matched task. -1 otherwise.' },
+    taskRef: { type: 'integer', description: 'For update/complete/duplicate: the [n] ref of the matched task. -1 otherwise.' },
     title: { type: 'string', description: 'create: concise task title, no date/time in it. update: a NEW title only if he asked to rename, else "".' },
-    date: { type: 'string', description: 'YYYY-MM-DD. create: "" if no date implied. update: the new date only if it changes, else "".' },
-    time: { type: 'string', description: '12-hour like "4:00 PM". create: "" if none. update: the new start time only if it changes, else "".' },
+    date: { type: 'string', description: 'YYYY-MM-DD. create: "" if no date implied. update: the new date only if it changes, else "". duplicate: the target day the copy lands on.' },
+    time: { type: 'string', description: '12-hour like "4:00 PM". create: "" if none. update: the new start time only if it changes, else "". duplicate: "" to keep the original\'s time, or the new time.' },
     durationMin: { type: 'integer', description: 'Minutes. create: what he said, else 30. update: the new duration only if it changes, else 0.' },
     subtasks: { type: 'array', items: { type: 'string' }, description: 'create only: short subtask titles if steps were listed, else []' },
     reminder: { type: 'boolean', description: 'create only: true only if a reminder/alert was requested' },
@@ -70,7 +70,8 @@ Deno.serve(async (req) => {
   const system = `You are the A.I. assistant inside Sentinel, Chris's daily command center. Turn his note into exactly ONE structured command. Today is ${today || '(unknown)'}${weekday ? ` (${weekday})` : ''}${nowTime ? `, current time ${nowTime}` : ''}, in his local timezone.
 
 His current open tasks are listed with [n] refs. Choose the intent:
-- "update" — the note changes an existing task: move / push / reschedule / retime / rename / change duration. Match by title words and context (a time like "my 2pm edit" narrows it). Return its taskRef and ONLY the fields that change; leave the rest "" (or 0 for durationMin).
+- "update" — the note changes an existing task IN PLACE: move / push / reschedule / retime / rename / change duration. The same task ends up somewhere else. Match by title words and context (a time like "my 2pm edit" narrows it). Return its taskRef and ONLY the fields that change; leave the rest "" (or 0 for durationMin).
+- "duplicate" — the note wants an existing task AGAIN, keeping the original: "add my X from today to tomorrow as well", "same thing again Friday", "copy it to next week", "do it again at 4". Words like also / as well / too / again / copy mean duplicate, not update. Return its taskRef, the target date, and time "" to keep the original's time (or the new time if he gives one). The copy carries the original's duration and subtasks automatically — don't restate them.
 - "complete" — the note says an existing task is done / finished / handled / to check off. Return its taskRef.
 - "create" — the note describes a NEW task that doesn't refer to any listed one.
 - "none" — nothing actionable, or two or more tasks match equally well. Never guess between plausible matches: say in note which ones were ambiguous so he can be specific.

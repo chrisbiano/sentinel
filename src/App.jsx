@@ -460,6 +460,7 @@ export default function App() {
         onAdd={addTask}
         onUpdate={updateTask}
         onComplete={toggleComplete}
+        onDuplicate={duplicateTask}
         defaultDate={selectedISO}
       />
 

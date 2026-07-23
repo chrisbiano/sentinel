@@ -21,7 +21,7 @@ const prettyDate = (iso) => {
    2pm edit to 4", "rough cut is done") and it proposes the change. Nothing is
    ever applied without a tap: create opens the pre-filled form, update/complete
    show a confirm card. */
-export default function AssistantLauncher({ onCommand, onAdd, onUpdate, onComplete, defaultDate }) {
+export default function AssistantLauncher({ onCommand, onAdd, onUpdate, onComplete, onDuplicate, defaultDate }) {
   const [open, setOpen] = useState(false)       // the text box is open
   const [text, setText] = useState('')
   const [parsing, setParsing] = useState(false)
@@ -47,7 +47,7 @@ export default function AssistantLauncher({ onCommand, onAdd, onUpdate, onComple
           subtasks: (c.subtasks || []).map(t => ({ id: Math.random().toString(36).slice(2, 9), title: t, done: false })),
         })
         setOpen(false)
-      } else if ((c.intent === 'update' || c.intent === 'complete') && c.task) {
+      } else if ((c.intent === 'update' || c.intent === 'complete' || c.intent === 'duplicate') && c.task) {
         setConfirm(c)
         setOpen(false)
       } else {
@@ -60,12 +60,17 @@ export default function AssistantLauncher({ onCommand, onAdd, onUpdate, onComple
     }
   }
 
-  // Apply a confirmed update/complete — the one place the assistant touches data.
+  // Apply a confirmed update/complete/duplicate — the one place the assistant
+  // touches data.
   const applyConfirm = () => {
     const c = confirm
     if (!c?.task) { reset(); return }
     if (c.intent === 'complete') {
       onComplete(c.task.id)
+    } else if (c.intent === 'duplicate') {
+      // Full copy — duration, reminder settings, fresh subtasks — onto the
+      // target day, keeping the original's time unless a new one was given.
+      onDuplicate(c.task, c.date ?? c.task.date, c.time || undefined)
     } else {
       const changes = {}
       if (c.title) changes.title = c.title
@@ -180,6 +185,14 @@ export default function AssistantLauncher({ onCommand, onAdd, onUpdate, onComple
               <p className="text-sm font-medium text-fg">{confirm.task.title}</p>
               {confirm.intent === 'complete' ? (
                 <p className="text-xs text-muted">Will be marked complete.</p>
+              ) : confirm.intent === 'duplicate' ? (
+                <p className="text-xs text-muted">
+                  A copy will be added on <span className="text-fg">{prettyDate(confirm.date ?? confirm.task.date)}</span>
+                  {' '}at <span className="text-fg">{confirm.time || confirm.task.time || 'anytime'}</span>
+                  {confirm.task.subtasks?.length
+                    ? ` — with ${confirm.task.subtasks.length} fresh subtask${confirm.task.subtasks.length === 1 ? '' : 's'}`
+                    : ''}. The original stays where it is.
+                </p>
               ) : (
                 <>
                   {confirm.date && changeRow('Date', prettyDate(confirm.task.date), prettyDate(confirm.date))}
@@ -201,7 +214,7 @@ export default function AssistantLauncher({ onCommand, onAdd, onUpdate, onComple
                 onClick={applyConfirm}
                 className="px-4 py-1.5 text-sm rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity"
               >
-                {confirm.intent === 'complete' ? 'Mark done' : 'Apply'}
+                {confirm.intent === 'complete' ? 'Mark done' : confirm.intent === 'duplicate' ? 'Add copy' : 'Apply'}
               </button>
             </div>
           </div>

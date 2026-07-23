@@ -135,12 +135,15 @@ export default function useTasks() {
   // any recurrence/series link — a duplicate is a new one-off, not a member of
   // the original's series. Pass `date` (YYYY-MM-DD) to drop the copy on another
   // day (e.g. reuse a block on the next shoot day); omit to keep the same day.
-  const duplicateTask = useCallback((task, date) => {
+  // Pass `time` to land the copy at a different start time (the assistant's
+  // "again tomorrow at 4" path); omit to keep the original's.
+  const duplicateTask = useCallback((task, date, time) => {
     const newSubId = () => (crypto?.randomUUID ? crypto.randomUUID() : `s${Date.now()}${Math.random().toString(36).slice(2, 6)}`)
     const { id, seriesId, recurrence, completed, subtasks, ...rest } = task
     return addTask({
       ...rest,
       ...(date !== undefined ? { date } : {}),
+      ...(time !== undefined ? { time } : {}),
       completed: false,
       subtasks: (subtasks || []).map(s => ({ id: newSubId(), title: s.title, done: false })),
     })
