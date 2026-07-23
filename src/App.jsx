@@ -206,9 +206,17 @@ export default function App() {
   // without a tap. Refs (not ids) round-trip through the model; mapped back here.
   const runAssistant = async (text) => {
     const now = new Date()
-    const openTasks = tasks.filter(t => !t.completed).slice(0, 60)
-    const roster = openTasks.map((t, i) => ({
+    // Open tasks plus the last few days' COMPLETED ones — "add my X from today
+    // to tomorrow" is most natural right after finishing X, so done tasks stay
+    // referenceable (the model sees them marked done and can duplicate them).
+    const doneCutoff = toISODate(new Date(Date.now() - 3 * 86_400_000))
+    const rosterTasks = [
+      ...tasks.filter(t => !t.completed),
+      ...tasks.filter(t => t.completed && t.date && t.date >= doneCutoff),
+    ].slice(0, 60)
+    const roster = rosterTasks.map((t, i) => ({
       ref: i, title: t.title, date: t.date, time: t.time, durationMin: t.duration,
+      completed: t.completed,
     }))
     const { data, error } = await supabase.functions.invoke('parse-task', {
       body: {
@@ -233,7 +241,7 @@ export default function App() {
       return { intent: 'create', title: p.title, date: p.date, time: p.time, durationMin: p.durationMin, subtasks: p.subtasks || [], reminder: p.reminder, note: '', task: null }
     }
     const c = data.command
-    const src = c.taskRef >= 0 ? (openTasks[c.taskRef] ?? null) : null
+    const src = c.taskRef >= 0 ? (rosterTasks[c.taskRef] ?? null) : null
     // Defensive time hygiene, whatever the model emitted: canonical AM/PM form,
     // and a duplicate whose time matches the source's clock reading (meridiem
     // aside) means "same time" — drop it so the original's time is kept.
