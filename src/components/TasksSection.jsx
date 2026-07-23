@@ -25,6 +25,12 @@ const prettyDate = (iso) => {
     weekday: 'short', month: 'short', day: 'numeric',
   })
 }
+const deletedWhen = (iso) => {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  return `${days} days ago`
+}
 
 function TaskIcon() {
   return (
@@ -118,7 +124,7 @@ function SortableTaskItem({ id, children }) {
   return children({ setNodeRef, style, dragHandle: { ...attributes, ...listeners } })
 }
 
-export default function TasksSection({ tasks, onToggleReminder, onSnooze, onUnsnooze, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, onReorder, highlightId, defaultDate }) {
+export default function TasksSection({ tasks, deletedTasks = [], onRestore, onToggleReminder, onSnooze, onUnsnooze, onToggleComplete, onAdd, onUpdate, onDelete, onDeleteSeries, onDuplicate, onReorder, highlightId, defaultDate }) {
   const [form, setForm] = useState(null) // null | 'new' | taskId
   const [confirmDelete, setConfirmDelete] = useState(null) // taskId of a repeating task
   const [dupFor, setDupFor] = useState(null)   // taskId whose "duplicate to…" picker is open
@@ -126,6 +132,7 @@ export default function TasksSection({ tasks, onToggleReminder, onSnooze, onUnsn
   const [dupMsg, setDupMsg] = useState(null)   // { id, text } transient "duplicated to…" note
   const [snoozeFor, setSnoozeFor] = useState(null) // taskId whose snooze picker is open
   const [showCompleted, setShowCompleted] = useState(false)
+  const [showDeleted, setShowDeleted] = useState(false)
 
   // Press-and-move on the grip drags; a tap/click elsewhere doesn't start a drag.
   const sensors = useSensors(
@@ -482,6 +489,41 @@ export default function TasksSection({ tasks, onToggleReminder, onSnooze, onUnsn
           {showCompleted && (
             <div className="space-y-2 mt-3">
               {completed.map(t => renderTask(t))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* The permanent net: anything deleted in the last 30 days, restorable.
+          Not day-filtered — a deleted task is findable no matter what you're
+          viewing. After 30 days they purge for real. */}
+      {deletedTasks.length > 0 && (
+        <div className="mt-3">
+          <button
+            onClick={() => setShowDeleted(v => !v)}
+            className="flex items-center gap-1.5 text-xs font-medium text-faint hover:text-muted transition-colors"
+          >
+            <span className={`transition-transform ${showDeleted ? 'rotate-90' : ''}`}>›</span>
+            Recently deleted ({deletedTasks.length})
+          </button>
+          {showDeleted && (
+            <div className="space-y-2 mt-3">
+              {deletedTasks.map(t => (
+                <div key={t.id} className="card p-3 opacity-70 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm text-muted truncate">{t.title}</p>
+                    <p className="text-xs text-faint mt-0.5">
+                      {t.date ? prettyDate(t.date) : 'no date'}{t.time ? ` · ${t.time}` : ''} — deleted {deletedWhen(t.deletedAt)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => onRestore(t.id)}
+                    className="text-xs px-2.5 py-1 rounded-lg border border-line2 text-muted hover:text-fg transition-colors shrink-0"
+                  >
+                    Restore
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>

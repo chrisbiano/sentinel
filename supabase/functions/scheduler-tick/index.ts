@@ -65,6 +65,7 @@ async function fireReminders(admin: any) {
     .select('id, user_id, title, time, remind_at, reminder_fired_at, reminder_repeat_min')
     .eq('has_reminder', true)
     .eq('completed', false)
+    .is('deleted_at', null)
     .lte('remind_at', new Date(now).toISOString())
     .gte('remind_at', new Date(now - REPEAT_WINDOW_MIN * 60_000).toISOString())
   let fired = 0
@@ -199,7 +200,8 @@ async function sendBriefs(admin: any) {
     if (past < 0 || past > BRIEF_WINDOW_MIN || p.last_brief_on === date) continue
 
     const { data: tasks } = await admin
-      .from('tasks').select('title, time, completed').eq('user_id', p.user_id).eq('date', date)
+      .from('tasks').select('title, time, completed')
+      .eq('user_id', p.user_id).eq('date', date).is('deleted_at', null)
     const openTasks = (tasks ?? []).filter((t: any) => !t.completed)
     const { count: needReply } = await admin
       .from('email_verdicts').select('*', { count: 'exact', head: true })

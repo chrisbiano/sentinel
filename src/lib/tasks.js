@@ -24,6 +24,7 @@ export function rowToTask(row) {
     reminderRepeatMin: row.reminder_repeat_min ?? 0,
     remindAt: row.remind_at ?? null,   // so the UI can tell a snoozed reminder from a scheduled one
     position: row.position ?? null,    // drag-reordered slot in the list (null = unset)
+    deletedAt: row.deleted_at ?? null, // soft-deleted → lives in "Recently deleted"
     isUrgent: row.is_urgent,
     completed: row.completed,
     subtasks: row.subtasks || [],
@@ -87,6 +88,7 @@ function patchToRow(patch) {
   if ('position' in patch) row.position = patch.position
   if ('recurrence' in patch) row.recurrence = patch.recurrence
   if ('seriesId' in patch) row.series_id = patch.seriesId
+  if ('deletedAt' in patch) row.deleted_at = patch.deletedAt
   return row
 }
 
@@ -129,12 +131,20 @@ export async function insertTasks(tasksArr, userId) {
   return data.map(rowToTask)
 }
 
-// Drop the rest of a series from `fromDate` on, leaving past occurrences as history.
+// Drop the rest of a series from `fromDate` on, leaving past occurrences as
+// history. Soft: the occurrences land in "Recently deleted" like any other
+// delete (reminders silenced so a hidden task can never buzz).
 export async function deleteSeriesFrom(seriesId, fromDate) {
   const { error } = await supabase
     .from('tasks')
-    .delete()
+    .update({ deleted_at: new Date().toISOString(), has_reminder: false })
     .eq('series_id', seriesId)
     .gte('date', fromDate)
   if (error) throw error
+}
+
+// Hard-delete soft-deleted rows past their 30-day grace (RLS: own rows only).
+export async function purgeOldDeleted() {
+  const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString()
+  await supabase.from('tasks').delete().lt('deleted_at', cutoff)
 }

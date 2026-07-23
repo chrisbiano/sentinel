@@ -34,6 +34,8 @@ export default function App() {
     deleteSeries,
     duplicateTask,
     reorderTasks,
+    deletedTasks,
+    restoreTask,
     undoableDelete,
     undoDelete,
     dismissUndoDelete,
@@ -405,6 +407,8 @@ export default function App() {
           <div id="tasks-section" className="scroll-mt-20">
             <TasksSection
               tasks={untimedTasks}
+              deletedTasks={deletedTasks}
+              onRestore={restoreTask}
               onToggleReminder={toggleReminder}
               onSnooze={snoozeTask}
               onUnsnooze={unsnoozeTask}

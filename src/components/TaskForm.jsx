@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RECURRENCE_OPTIONS, DAY_LABELS, encodeWeekly } from '../lib/recurrence'
+import { RECURRENCE_OPTIONS, DAY_LABELS, encodeWeekly, recurrenceLabel } from '../lib/recurrence'
 import useTemplates from '../hooks/useTemplates'
 
 const uid = () => Math.random().toString(36).slice(2, 9)
@@ -123,6 +123,7 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
 
   const { templates, saveTemplate, deleteTemplate } = useTemplates()
   const [tplMsg, setTplMsg] = useState(null)   // 'Template saved ✓' | the real error
+  const [stopRepeat, setStopRepeat] = useState(false)   // series member → become a one-off on save
 
   const toggleWeekday = (d) =>
     setWeeklyDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
@@ -179,6 +180,7 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
       time: unscheduled ? null : to24Display(time),
       duration: Number(duration) || 30,
       recurrence: resolvedRecurrence(),
+      ...(stopRepeat ? { stopRepeat: true } : {}),
       hasReminder,
       reminderLeadMin: hasReminder ? reminderLeadMin : 0,
       reminderRepeatMin: hasReminder ? reminderRepeatMin : 0,
@@ -286,6 +288,36 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
             label="Repeat" suffix="min apart"
             value={reminderRepeatMin} onChange={setReminderRepeatMin} presets={REPEAT_PRESETS}
           />
+        </div>
+      )}
+
+      {/* A series member shows its repeat and offers the off-switch — editing one
+          occurrence still never reshapes the others, but the series can be ended. */}
+      {initial?.seriesId && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line2 bg-surface2/30 p-3 text-xs">
+          {stopRepeat ? (
+            <>
+              <span className="text-muted">Will stop repeating — later occurrences are removed when you save.</span>
+              <button
+                type="button"
+                onClick={() => setStopRepeat(false)}
+                className="text-faint hover:text-fg transition-colors shrink-0"
+              >
+                Keep repeating
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="text-muted">↻ Repeats — {recurrenceLabel(initial.recurrence) ?? 'on a schedule'}</span>
+              <button
+                type="button"
+                onClick={() => setStopRepeat(true)}
+                className="px-2 py-1 rounded-lg border border-line2 text-muted hover:text-fg transition-colors shrink-0"
+              >
+                Stop repeating
+              </button>
+            </>
+          )}
         </div>
       )}
 

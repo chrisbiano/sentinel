@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import {
-  fetchTasks, insertTask, insertTasks, updateTaskRow, deleteTaskRow,
-  deleteSeriesFrom, toISODate, computeRemindAt,
+  fetchTasks, insertTask, insertTasks, updateTaskRow,
+  deleteSeriesFrom, purgeOldDeleted, toISODate, computeRemindAt,
 } from '../lib/tasks'
 import { occurrences } from '../lib/recurrence'
 
@@ -73,7 +73,13 @@ export default function useTasks() {
             localStorage.removeItem(TASKS_KEY) // migrated — don't re-import
           }
         }
-        setTasks(rows)
+        // Live vs recently-deleted (30-day grace; anything older is purged).
+        const cutoff = Date.now() - 30 * 86_400_000
+        setTasks(rows.filter(r => !r.deletedAt))
+        setDeletedTasks(rows
+          .filter(r => r.deletedAt && new Date(r.deletedAt).getTime() > cutoff)
+          .sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt)))
+        purgeOldDeleted().catch(() => { /* best-effort cleanup */ })
       } catch (e) {
         console.error('Failed to load tasks:', e)
       } finally {
@@ -140,9 +146,19 @@ export default function useTasks() {
     })
   }, [addTask])
 
+  // Soft-deleted tasks — hidden everywhere, restorable from "Recently deleted"
+  // for 30 days. Deletes also silence the reminder so a hidden task never buzzes.
+  const [deletedTasks, setDeletedTasks] = useState([])
+
   // Stop a repeating task: remove this occurrence and everything after it.
   const deleteSeries = useCallback((seriesId, fromDate) => {
+    const deletedAt = new Date().toISOString()
+    const going = tasksRef.current.filter(t => t.seriesId === seriesId && t.date >= fromDate)
     setTasks(prev => prev.filter(t => !(t.seriesId === seriesId && t.date >= fromDate)))
+    setDeletedTasks(prev => [
+      ...going.map(t => ({ ...t, deletedAt, hasReminder: false })),
+      ...prev,
+    ])
     if (isSupabaseConfigured) {
       deleteSeriesFrom(seriesId, fromDate).catch(e => console.error('Delete series failed:', e))
     }
@@ -150,6 +166,35 @@ export default function useTasks() {
 
   const updateTask = useCallback((id, data) => {
     const cur = tasksRef.current.find(t => t.id === id)
+
+    // "Stop repeating" from the edit form: this occurrence becomes a one-off,
+    // and the series' LATER occurrences are removed (soft — they land in
+    // Recently deleted). Earlier occurrences stay as history.
+    if (data.stopRepeat && cur?.seriesId) {
+      const { stopRepeat: _sr, recurrence: _rc, ...rest } = data
+      const seriesId = cur.seriesId
+      const after = cur.date
+      const deletedAt = new Date().toISOString()
+      const going = tasksRef.current.filter(t => t.seriesId === seriesId && t.date > after && t.id !== id)
+      setDeletedTasks(prev => [
+        ...going.map(t => ({ ...t, deletedAt, hasReminder: false })),
+        ...prev,
+      ])
+      const patch = { ...rest, seriesId: null, recurrence: null }
+      patch.remindAt = computeRemindAt({ ...cur, ...rest })
+      patch.reminderFiredAt = null
+      setTasks(prev => prev
+        .filter(t => !(t.seriesId === seriesId && t.date > after && t.id !== id))
+        .map(t => (t.id === id
+          ? { ...t, ...rest, seriesId: null, recurrence: null, remindAt: patch.remindAt }
+          : t)))
+      if (isSupabaseConfigured) {
+        updateTaskRow(id, patch).catch(e => console.error('Update failed:', e))
+        const d = new Date(`${after}T00:00:00`); d.setDate(d.getDate() + 1)
+        deleteSeriesFrom(seriesId, toISODate(d)).catch(e => console.error('Series stop failed:', e))
+      }
+      return
+    }
 
     // A Repeat chosen while editing a one-off: this task becomes the series'
     // first occurrence, and the future occurrences are created after it (fresh
@@ -204,43 +249,48 @@ export default function useTasks() {
     if (isSupabaseConfigured) updateTaskRow(id, patch).catch(e => console.error('Update failed:', e))
   }, [])
 
-  // Deleting is instant, but undoable for a few seconds — one tap on the trash
-  // shouldn't be able to permanently destroy a task with its subtasks.
+  // Deleting is instant but SOFT: the row is stamped deleted_at (reminder
+  // silenced) and lands in "Recently deleted", restorable for 30 days. The
+  // 6-second toast is just the quick catch; the section is the real net.
   const [undoableDelete, setUndoableDelete] = useState(null)   // { task } | null
   const undoDeleteTimer = useRef(null)
   useEffect(() => () => { if (undoDeleteTimer.current) clearTimeout(undoDeleteTimer.current) }, [])
 
   const deleteTask = useCallback((id) => {
     const t = tasksRef.current.find(x => x.id === id)
+    if (!t) return
+    const deletedAt = new Date().toISOString()
     setTasks(prev => prev.filter(x => x.id !== id))
-    if (isSupabaseConfigured) deleteTaskRow(id).catch(e => console.error('Delete failed:', e))
-    if (t) {
-      if (undoDeleteTimer.current) clearTimeout(undoDeleteTimer.current)
-      setUndoableDelete({ task: t })
-      undoDeleteTimer.current = setTimeout(() => setUndoableDelete(null), 6000)
+    setDeletedTasks(prev => [{ ...t, deletedAt, hasReminder: false }, ...prev])
+    if (isSupabaseConfigured) {
+      updateTaskRow(id, { deletedAt, hasReminder: false, reminderFiredAt: null })
+        .catch(e => console.error('Delete failed:', e))
     }
+    if (undoDeleteTimer.current) clearTimeout(undoDeleteTimer.current)
+    setUndoableDelete({ task: t })
+    undoDeleteTimer.current = setTimeout(() => setUndoableDelete(null), 6000)
   }, [])
 
-  // Bring the just-deleted task back (re-inserted, so it gets a fresh id but
-  // keeps everything else — subtasks, reminder settings, even its series link).
-  const undoDelete = useCallback(async () => {
+  // Bring a deleted task back — same row, same id; just clears the stamp.
+  // (The reminder stays off after a restore; re-arm it with the bell.)
+  const restoreTask = useCallback((id) => {
+    const t = deletedTasks.find(x => x.id === id)
+    if (!t) return
+    setDeletedTasks(prev => prev.filter(x => x.id !== id))
+    const { deletedAt: _d, ...live } = t
+    setTasks(prev => [...prev, live])
+    if (isSupabaseConfigured) {
+      updateTaskRow(id, { deletedAt: null }).catch(e => console.error('Restore failed:', e))
+    }
+  }, [deletedTasks])
+
+  const undoDelete = useCallback(() => {
     const entry = undoableDelete
     if (!entry) return
     setUndoableDelete(null)
     if (undoDeleteTimer.current) clearTimeout(undoDeleteTimer.current)
-    const { id: _oldId, remindAt: _ra, position: _pos, ...rest } = entry.task
-    if (isSupabaseConfigured) {
-      try {
-        const created = await insertTask(rest, userIdRef.current)
-        setTasks(prev => [...prev, created])
-      } catch (e) {
-        console.error('Undo delete failed:', e)
-        setError('Could not restore the task')
-      }
-    } else {
-      setTasks(prev => [...prev, { ...rest, id: Date.now() }])
-    }
-  }, [undoableDelete])
+    restoreTask(entry.task.id)
+  }, [undoableDelete, restoreTask])
 
   const dismissUndoDelete = useCallback(() => {
     if (undoDeleteTimer.current) clearTimeout(undoDeleteTimer.current)
@@ -317,7 +367,7 @@ export default function useTasks() {
   return {
     tasks, loading, error, clearError: () => setError(null),
     addTask, updateTask, deleteTask, deleteSeries, duplicateTask, reorderTasks,
-    undoableDelete, undoDelete, dismissUndoDelete,
+    deletedTasks, restoreTask, undoableDelete, undoDelete, dismissUndoDelete,
     toggleReminder, snoozeTask, unsnoozeTask, toggleComplete, toggleSubtask,
   }
 }

@@ -116,7 +116,8 @@ Deno.serve(async (req) => {
   const date = body.today || new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date())
 
   const { data: tasks } = await admin
-    .from('tasks').select('title, time, completed').eq('user_id', userId).eq('date', date)
+    .from('tasks').select('title, time, completed')
+    .eq('user_id', userId).eq('date', date).is('deleted_at', null)
   const openTasks = (tasks ?? []).filter((t: any) => !t.completed)
   const { count: needReply } = await admin
     .from('email_verdicts').select('*', { count: 'exact', head: true })
