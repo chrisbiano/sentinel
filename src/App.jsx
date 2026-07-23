@@ -133,6 +133,7 @@ export default function App() {
     events,
     loading: calendarLoading,
     error: calendarError,
+    refresh: refreshCalendar,
   } = useCalendarEvents(rangeStart, rangeEnd)
 
   const dayEvents = events.filter(e => e.date === selectedISO)
@@ -314,7 +315,11 @@ export default function App() {
   const untimedTasks = visibleTasks.filter(t => !t.time)
 
   return (
-    <Layout onOpenSettings={() => setSettingsOpen(true)}>
+    <Layout
+      onOpenSettings={() => setSettingsOpen(true)}
+      onRefresh={refreshCalendar}
+      refreshing={calendarLoading}
+    >
       <main className="space-y-6">
         {/* Morning brief — pinned at the very top until dismissed. */}
         {showBrief && (

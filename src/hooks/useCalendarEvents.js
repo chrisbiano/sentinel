@@ -86,5 +86,14 @@ export default function useCalendarEvents(rangeStart, rangeEnd) {
     }
   }, [cacheKey, fetchRange])
 
-  return { events, loading, error, refresh: fetchRange }
+  // The header's manual refresh: drop the WHOLE session cache (an event just
+  // edited in Google Calendar should be fresh on every day you visit next, not
+  // only the one on screen) and refetch the visible range with the loading state
+  // showing, so the tap visibly did something.
+  const refresh = useCallback(() => {
+    cache.clear()
+    return fetchRange()
+  }, [fetchRange])
+
+  return { events, loading, error, refresh }
 }

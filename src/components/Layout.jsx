@@ -1,4 +1,15 @@
-export default function Layout({ children, onOpenSettings }) {
+function RefreshIcon({ spinning }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round"
+      className={`w-4 h-4 ${spinning ? 'animate-spin' : ''}`}>
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <path d="M21 3v6h-6" />
+    </svg>
+  )
+}
+
+export default function Layout({ children, onOpenSettings, onRefresh, refreshing }) {
   return (
     <div
       className="min-h-screen bg-bg"
@@ -21,12 +32,27 @@ export default function Layout({ children, onOpenSettings }) {
               <h1 className="text-lg sm:text-xl font-medium tracking-tight text-fg">Sentinel</h1>
               <p className="text-muted text-xs sm:text-sm">Your daily command center</p>
             </div>
-            <button
-              onClick={onOpenSettings}
-              className="px-4 py-2 bg-transparent border border-line2 text-fg rounded-lg font-medium text-sm hover:bg-surface2 transition-colors shrink-0"
-            >
-              Settings
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Pull fresh calendar data on demand — an event just edited in
+                  Google shouldn't have to wait for the next natural sync. */}
+              {onRefresh && (
+                <button
+                  onClick={onRefresh}
+                  disabled={refreshing}
+                  aria-label="Refresh calendar"
+                  title="Refresh calendar"
+                  className="w-9 h-9 flex items-center justify-center bg-transparent border border-line2 text-fg rounded-lg hover:bg-surface2 transition-colors disabled:opacity-60"
+                >
+                  <RefreshIcon spinning={refreshing} />
+                </button>
+              )}
+              <button
+                onClick={onOpenSettings}
+                className="px-4 py-2 bg-transparent border border-line2 text-fg rounded-lg font-medium text-sm hover:bg-surface2 transition-colors"
+              >
+                Settings
+              </button>
+            </div>
           </div>
         </div>
       </header>
