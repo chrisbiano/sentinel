@@ -1,0 +1,9 @@
+project_id = "sentinel"
+
+# Per-function deploy config for `supabase functions deploy`.
+# verify_jwt = false ONLY for the cron heartbeat — it authenticates with its own
+# CRON_SECRET header instead of a user JWT. Every other function requires the
+# signed-in user's JWT (the CLI's default), matching how they were deployed
+# from the dashboard.
+[functions.scheduler-tick]
+verify_jwt = false
