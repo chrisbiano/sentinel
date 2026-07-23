@@ -10,9 +10,11 @@ function fullDate(iso) {
 }
 
 /* Read an email in-app — no bouncing to Gmail. Fetches the full body on open
- * and renders it in a locked-down sandboxed iframe: `sandbox=""` blocks scripts,
- * forms, popups, and same-origin access, so hostile email markup can't touch
- * Sentinel or the page. Reply is one click away without leaving the reader. */
+ * and renders it in a sandboxed iframe: scripts, forms, and same-origin access
+ * stay blocked, so hostile email markup can't touch Sentinel or the page. The
+ * one allowance is user-clicked links opening in a NEW TAB (allow-popups +
+ * escape, with <base target="_blank">) — same risk profile as clicking a link
+ * in Gmail itself. Reply is one click away without leaving the reader. */
 export default function ReadModal({ email, onClose, onReply }) {
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState(null)
@@ -81,7 +83,7 @@ export default function ReadModal({ email, onClose, onReply }) {
           ) : (
             <iframe
               title="Email content"
-              sandbox=""
+              sandbox="allow-popups allow-popups-to-escape-sandbox"
               srcDoc={`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base target="_blank"></head><body style="margin:0;padding:12px;background:#fff;">${msg.html}</body></html>`}
               className="w-full h-[55vh] bg-white rounded-lg border border-line"
             />
