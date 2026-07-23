@@ -122,7 +122,7 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
   const canRepeat = !initial?.seriesId
 
   const { templates, saveTemplate, deleteTemplate } = useTemplates()
-  const [tplSaved, setTplSaved] = useState(false)
+  const [tplMsg, setTplMsg] = useState(null)   // 'Template saved ✓' | the real error
 
   const toggleWeekday = (d) =>
     setWeeklyDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
@@ -145,7 +145,8 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
     setSubtasks((t.subtasks || []).map(s => ({ id: uid(), title: s.title, done: false })))
   }
 
-  // Save the form's current shape as a template (named after its title).
+  // Save the form's current shape as a template (named after its title). A
+  // failure shows the real error — a silent no-op just looks broken.
   const saveAsTemplate = async () => {
     if (!title.trim()) return
     const res = await saveTemplate({
@@ -157,7 +158,8 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
       reminderRepeatMin,
       subtasks: subtasks.filter(s => s.title.trim()),
     })
-    if (res.ok) { setTplSaved(true); setTimeout(() => setTplSaved(false), 2000) }
+    setTplMsg(res.ok ? 'Template saved ✓' : `Couldn't save template: ${res.error || 'unknown error'}`)
+    setTimeout(() => setTplMsg(null), res.ok ? 2500 : 8000)
   }
   const [subtasks, setSubtasks] = useState(
     initial?.subtasks?.map(s => ({ ...s })) ?? []
@@ -364,10 +366,10 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
         <button
           type="button"
           onClick={saveAsTemplate}
-          disabled={!title.trim() || tplSaved}
-          className="text-xs text-faint hover:text-fg transition-colors disabled:opacity-60 text-left"
+          disabled={!title.trim() || Boolean(tplMsg)}
+          className="text-xs text-faint hover:text-fg transition-colors disabled:opacity-60 text-left min-w-0"
         >
-          {tplSaved ? 'Template saved ✓' : 'Save as template'}
+          {tplMsg || 'Save as template'}
         </button>
         <div className="flex gap-2 shrink-0">
           <button
