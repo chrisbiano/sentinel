@@ -149,11 +149,51 @@ export default function useTasks() {
   }, [])
 
   const updateTask = useCallback((id, data) => {
+    const cur = tasksRef.current.find(t => t.id === id)
+
+    // A Repeat chosen while editing a one-off: this task becomes the series'
+    // first occurrence, and the future occurrences are created after it (fresh
+    // unchecked copies of its subtasks). Tasks already in a series never get
+    // here — the form hides Repeat for them.
+    if (data.recurrence && cur && !cur.seriesId && (data.date ?? cur.date)) {
+      const seriesId = crypto?.randomUUID ? crypto.randomUUID() : `s${Date.now()}`
+      const merged = { ...cur, ...data, seriesId }
+      const patch = { ...data, seriesId }
+      patch.remindAt = computeRemindAt(merged)
+      patch.reminderFiredAt = null
+      setTasks(prev => prev.map(t => (t.id === id ? { ...merged, remindAt: patch.remindAt } : t)))
+
+      const newSubId = () => (crypto?.randomUUID ? crypto.randomUUID() : `s${Date.now()}${Math.random().toString(36).slice(2, 6)}`)
+      const { id: _id, remindAt: _ra, position: _pos, ...blueprint } = merged
+      const copies = occurrences(merged.date, data.recurrence)
+        .filter(d => d !== merged.date)
+        .map(date => ({
+          ...blueprint,
+          date,
+          completed: false,
+          subtasks: (merged.subtasks || []).map(s => ({ id: newSubId(), title: s.title, done: false })),
+        }))
+
+      if (isSupabaseConfigured) {
+        updateTaskRow(id, patch).catch(e => console.error('Update failed:', e))
+        if (copies.length) {
+          insertTasks(copies, userIdRef.current)
+            .then(created => setTasks(prev => [...prev, ...created]))
+            .catch(e => {
+              console.error('Series creation failed:', e)
+              setError('Saved the task, but creating its repeats failed')
+            })
+        }
+      } else {
+        setTasks(prev => [...prev, ...copies.map((c, i) => ({ ...c, id: Date.now() + i }))])
+      }
+      return
+    }
+
     const patch = { ...data }
     // If a reminder-relevant field changed, recompute when it fires and re-arm it.
     if ('date' in data || 'time' in data || 'hasReminder' in data
       || 'reminderLeadMin' in data || 'reminderRepeatMin' in data) {
-      const cur = tasksRef.current.find(t => t.id === id)
       patch.remindAt = computeRemindAt({ ...cur, ...data })
       patch.reminderFiredAt = null
     }

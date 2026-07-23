@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { RECURRENCE_OPTIONS, DAY_LABELS, encodeWeekly } from '../lib/recurrence'
+import useTemplates from '../hooks/useTemplates'
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 
@@ -115,16 +116,48 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
     () => [new Date(`${initial?.date || defaultDate}T00:00:00`).getDay()]
   )
   const isEditing = Boolean(initial?.id)
+  // Repeat is offered when creating AND when editing a one-off (saving then
+  // spawns the series from its day). Tasks already in a series never reshape
+  // the series from one occurrence's edit form.
+  const canRepeat = !initial?.seriesId
+
+  const { templates, saveTemplate, deleteTemplate } = useTemplates()
+  const [tplSaved, setTplSaved] = useState(false)
 
   const toggleWeekday = (d) =>
     setWeeklyDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
 
   const resolvedRecurrence = () => {
-    if (unscheduled || isEditing || !recurrence) return null
+    if (unscheduled || !canRepeat || !recurrence) return null
     if (recurrence === 'weekly') {
       return weeklyDays.length ? encodeWeekly(weeklyDays) : null
     }
     return recurrence
+  }
+
+  // Drop a template's blueprint into the form — everything but date/time.
+  const applyTemplate = (t) => {
+    setTitle(t.title)
+    setDuration(t.duration ?? 30)
+    setHasReminder(Boolean(t.has_reminder))
+    setReminderLeadMin(t.reminder_lead_min ?? 0)
+    setReminderRepeatMin(t.reminder_repeat_min ?? 0)
+    setSubtasks((t.subtasks || []).map(s => ({ id: uid(), title: s.title, done: false })))
+  }
+
+  // Save the form's current shape as a template (named after its title).
+  const saveAsTemplate = async () => {
+    if (!title.trim()) return
+    const res = await saveTemplate({
+      name: title.trim(),
+      title: title.trim(),
+      duration: Number(duration) || 30,
+      hasReminder,
+      reminderLeadMin,
+      reminderRepeatMin,
+      subtasks: subtasks.filter(s => s.title.trim()),
+    })
+    if (res.ok) { setTplSaved(true); setTimeout(() => setTplSaved(false), 2000) }
   }
   const [subtasks, setSubtasks] = useState(
     initial?.subtasks?.map(s => ({ ...s })) ?? []
@@ -155,6 +188,31 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
 
   return (
     <form onSubmit={submit} className="card space-y-3">
+      {/* Saved blueprints — one tap pre-fills everything but the date/time. */}
+      {!isEditing && templates.length > 0 && (
+        <div>
+          <p className="text-xs text-faint mb-1.5">Start from a template</p>
+          <div className="flex flex-wrap gap-1.5">
+            {templates.map(t => (
+              <span key={t.id} className="flex items-center gap-1 bg-surface2 border border-line2 rounded-lg pl-2.5 pr-1 py-1">
+                <button type="button" onClick={() => applyTemplate(t)} className="text-xs text-fg">
+                  {t.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => deleteTemplate(t.id)}
+                  aria-label={`Delete template ${t.name}`}
+                  title="Delete template"
+                  className="w-4 h-4 flex items-center justify-center rounded text-faint hover:text-fg transition-colors"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       <input
         autoFocus
         value={title}
@@ -229,7 +287,7 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
         </div>
       )}
 
-      {!unscheduled && !isEditing && (
+      {!unscheduled && canRepeat && (
         <div className="space-y-2">
           <label className="flex flex-col gap-1 text-xs text-faint">
             Repeat
@@ -301,21 +359,32 @@ export default function TaskForm({ initial, defaultDate, onSave, onCancel }) {
         ))}
       </div>
 
-      <div className="flex gap-2 justify-end">
+      <div className="flex items-center justify-between gap-2">
+        {/* Keep this shape for reuse — becomes a chip on future task forms. */}
         <button
           type="button"
-          onClick={onCancel}
-          className="px-3 py-1.5 text-sm rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors"
+          onClick={saveAsTemplate}
+          disabled={!title.trim() || tplSaved}
+          className="text-xs text-faint hover:text-fg transition-colors disabled:opacity-60 text-left"
         >
-          Cancel
+          {tplSaved ? 'Template saved ✓' : 'Save as template'}
         </button>
-        <button
-          type="submit"
-          disabled={!title.trim()}
-          className="px-3 py-1.5 text-sm rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
-        >
-          Save
-        </button>
+        <div className="flex gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-3 py-1.5 text-sm rounded-lg border border-line2 text-muted hover:text-fg hover:bg-surface2 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!title.trim()}
+            className="px-3 py-1.5 text-sm rounded-lg bg-accent text-accent-fg font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
+          >
+            Save
+          </button>
+        </div>
       </div>
     </form>
   )

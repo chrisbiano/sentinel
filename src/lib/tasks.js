@@ -85,6 +85,8 @@ function patchToRow(patch) {
   if ('remindAt' in patch) row.remind_at = patch.remindAt
   if ('reminderFiredAt' in patch) row.reminder_fired_at = patch.reminderFiredAt
   if ('position' in patch) row.position = patch.position
+  if ('recurrence' in patch) row.recurrence = patch.recurrence
+  if ('seriesId' in patch) row.series_id = patch.seriesId
   return row
 }
 
